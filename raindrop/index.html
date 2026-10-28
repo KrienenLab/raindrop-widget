@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raindrop</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- three.js is vendored, so the viewer works without a CDN -->
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <aside id="sidebar">
+    <h1 id="title">Raindrop</h1>
+    <div id="count"></div>
+
+    <section>
+      <h2>View</h2>
+      <div class="view-count">
+        <label>Views <select id="view-count" aria-label="Number of views"></select></label>
+      </div>
+      <select id="embedding" aria-label="Embedding"></select>
+      <table id="faces" aria-label="Show a side of the data"></table>
+      <label class="turn-about" id="turn-about-row">Turn about <select id="turn-about" aria-label="Axis drags turn about"></select></label>
+      <p class="hint" id="drag-hint">Shift+drag: spin or tilt only (the main direction)</p>
+      <table id="rotation" aria-label="Rotation: slider, angle and reset per axis"></table>
+      <button id="reset-rotation" title="Set every angle to 0 degrees">Reset rotation</button>
+      <label class="slider">Show axes <input id="show-axes" type="checkbox" checked></label>
+      <label class="slider">Point size <input id="point-size" type="range" min="-4" max="1" step="0.1" value="0" title="Point size (log scale)"></label>
+      <label class="slider">Shown cells <input id="shown-opacity" type="range" min="0.05" max="1" step="0.01" value="1"></label>
+      <label class="slider">Filtered-out cells <input id="context-opacity" type="range" min="0" max="0.4" step="0.01" value="0.08"></label>
+    </section>
+
+    <section>
+      <h2>Color by</h2>
+      <select id="color-field" aria-label="Color by column"></select>
+      <div class="gene-box">
+        <select id="gene-source" aria-label="Gene source"></select>
+        <input id="gene" list="gene-list" placeholder="or type a gene" autocomplete="off">
+        <datalist id="gene-list"></datalist>
+      </div>
+    </section>
+
+    <section>
+      <h2>Filters</h2>
+      <div id="filters"></div>
+      <select id="add-filter" aria-label="Add filter"></select>
+    </section>
+  </aside>
+
+  <main id="view">
+    <!-- One tile per view, over a shared canvas (scene.js); each holds its axis labels, legend and widget -->
+    <div id="tiles"></div>
+    <!-- With ?embed=1 (a widget on another page) the side panel is hidden and app.js moves the cell count, color
+         menu and reset button here -->
+    <div id="embed-bar" hidden></div>
+    <!-- Shown for a moment when a plain scroll over an embedded view scrolls the page instead of zooming -->
+    <div id="zoom-hint" hidden></div>
+    <div id="status"></div>
+  </main>
+
+  <!-- Legend of the selected view, in its own panel right of the plots -->
+  <aside id="legend"></aside>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

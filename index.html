@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raindrop widget demo</title>
+  <style>
+    body { margin: 0; font-family: Georgia, serif; color: #222; background: #fafaf7; }
+    header { padding: 24px 16px; background: #1e2a3a; color: #fff; }
+    header h1 { margin: 0 auto; max-width: 1000px; font-size: 24px; font-weight: normal; }
+    main { max-width: 1000px; margin: 0 auto; padding: 16px; }
+    p { line-height: 1.5; }
+    /* The widget: as wide as the page and nearly as tall as the window */
+    figure { margin: 0 0 16px; }
+    .widget { display: block; width: 100%; height: 90vh; border: 0; border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; background: #fff; }
+    figcaption { max-width: 1000px; margin: 6px auto 0; padding: 0 16px; font-size: 14px; color: #555; }
+    pre { background: #eee; padding: 10px; overflow-x: auto; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header><h1>Krienen Lab &middot; Data viewers (demo page)</h1></header>
+  <main>
+    <p>A stand-in for a page of the lab website. The viewer below is an ordinary iframe, so it works the same way
+      inside any site builder that allows embedded HTML.</p>
+  </main>
+
+  <figure>
+      <iframe class="widget" title="Mouse whole brain MERFISH, 3D viewer"
+              src="raindrop/?data=../data/WMB_Yao2023_MERFISH_250k/&amp;embed=1" allowfullscreen loading="lazy"></iframe>
+      <figcaption>The adult mouse brain (C57BL6J-638850, P56 male) in Allen CCF coordinates: 250,000 of 3.7 million
+        MERFISH cells, colored by the published cell types. Drag to turn, Ctrl + scroll (&#8984; on a Mac) to zoom,
+        tick legend entries to show only those cells, More controls for the full viewer. Data: Yao et al., Nature (2023);
+        Allen Brain Cell Atlas.</figcaption>
+  </figure>
+
+  <main>
+
+    <h2>Embedding it</h2>
+    <pre>&lt;iframe src="https://krienenlab.github.io/raindrop-widget/raindrop/?data=../data/WMB_Yao2023_MERFISH_250k/&amp;embed=1"
+        style="width:100%; height:90vh; border:0" allowfullscreen loading="lazy"&gt;&lt;/iframe&gt;</pre>
+    <p>Below it the page goes on as usual: a plain scroll over the widget scrolls the page.</p>
+    <div style="height: 600px"></div>
+  </main>
+</body>
+</html>
