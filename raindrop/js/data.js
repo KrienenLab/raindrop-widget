@@ -9,6 +9,11 @@ async function fetchArray(url, dtype) {
   return new ARRAY_TYPES[dtype](await response.arrayBuffer());
 }
 
+// One-byte gene values (convert.py --one-byte): each code times the gene's step, code 255 meaning no value
+export function decodeSteps(codes, step) {
+  return Float32Array.from(codes, (code) => (code === 255 ? NaN : code * step));
+}
+
 export class Dataset {
   static async load(url) {
     // Resolve the folder against the page, so relative and absolute URLs both work
@@ -47,6 +52,10 @@ export class Dataset {
     const index = source.genes.indexOf(gene);
     if (index < 0) throw new Error(`${gene} is not in gene source ${sourceName}`);
     const path = source.path.replace('{index}', index);
-    return this.cached(`gene:${sourceName}:${gene}`, () => fetchArray(new URL(path, this.base), source.dtype));
+    const load = async () => {
+      const values = await fetchArray(new URL(path, this.base), source.dtype);
+      return source.steps ? decodeSteps(values, source.steps[index]) : values;
+    };
+    return this.cached(`gene:${sourceName}:${gene}`, load);
   }
 }

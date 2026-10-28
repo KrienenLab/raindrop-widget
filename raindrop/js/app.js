@@ -6,7 +6,7 @@ import * as filters from './filters.js';
 import { bounds, faceView, niceTicks, readsHighToLow, tickTarget, toXYZ, uprightAngle, validMask } from './positions.js';
 import { groupState, treeRows } from './hierarchy.js';
 import { clampDegrees, faceRotation, MAX_DEGREES, openingTurnAxis } from './rotation.js';
-import { categoryPalette, colorCategories, colorValues, quantile, sortedFinite, toHex, COLORMAP_CSS } from './colors.js';
+import { categoryPalette, colorCategories, colorValues, geneColors, quantile, sortedFinite, toHex, COLORMAP_CSS } from './colors.js';
 
 // Create an element with properties and children
 function el(tag, props = {}, children = []) {
@@ -63,11 +63,13 @@ function axisTitle(label, ends) {
   return ends.some((name) => /^[-+]/.test(name)) ? label : ends.map(capitalize).join('\u2013');
 }
 
-// What a view is colored by, as its legends name it. Genes of a source other than the first (X's measured
-// genes) name their source, e.g. 'Pcp4 (imputed, log scale)'
-function colorLabel(color, firstSource) {
+// What a view is colored by, as its legends name it: genes with their scale ('log scale' when the viewer takes the
+// log, or the source's own, e.g. 'log2'), and genes of a source other than the first (X's measured genes) with their
+// source, e.g. 'Pcp4 (imputed, log scale)'
+function colorLabel(color, sources) {
   if (color.kind !== 'gene') return color.name;
-  return color.source === firstSource ? `${color.name} (log scale)` : `${color.name} (${color.source}, log scale)`;
+  const scale = sources.find((s) => s.name === color.source).scale ?? 'log scale';
+  return color.source === sources[0].name ? `${color.name} (${scale})` : `${color.name} (${color.source}, ${scale})`;
 }
 
 function formatCount(n) {
@@ -750,7 +752,10 @@ class App {
   // Color by: any obs column, or a gene typed into the gene box; applies to the selected view
   buildColorControls() {
     const select = document.getElementById('color-field');
-    select.append(el('option', { value: '', textContent: '(gene)', disabled: true }));
+    // A dataset without genes shows no gene box and no '(gene)' entry (the menu's text while a gene colors the view)
+    const hasGenes = this.manifest.gene_sources.some((s) => s.genes.length > 0);
+    select.append(el('option', { value: '', textContent: '(gene)', disabled: true, hidden: !hasGenes }));
+    document.getElementById('gene-box').hidden = !hasGenes;
     for (const f of this.manifest.fields) select.append(el('option', { value: f.name, textContent: f.name }));
     select.addEventListener('change', () => this.setColor(this.selected, { kind: 'field', name: select.value }));
 
@@ -795,7 +800,7 @@ class App {
     this.setStatus(`Loading ${color.name}...`);
     const rgb = color.kind === 'gene' ? await this.geneColors(view, color) : await this.fieldColors(view, color);
     view.scene.setColors(rgb);
-    view.tileLegend.textContent = colorLabel(color, this.manifest.gene_sources[0].name);
+    view.tileLegend.textContent = colorLabel(color, this.manifest.gene_sources);
     if (view === this.selected) {
       this.showColorControls(view);
       this.renderLegend();
@@ -809,7 +814,8 @@ class App {
     const values = await this.dataset.geneValues(color.source, color.name);
     const expressed = sortedFinite(values, true);
     view.colorRange = [0, expressed.length ? quantile(expressed, 0.99) : 1];
-    return colorValues(Float32Array.from(values, Math.log1p), 0, Math.log1p(view.colorRange[1]));
+    const { scale } = this.manifest.gene_sources.find((s) => s.name === color.source);
+    return geneColors(values, view.colorRange[1], scale);
   }
 
   // Categories use the palette; numbers span their middle 98%, so outliers do not wash out the rest
@@ -992,7 +998,7 @@ class App {
     const body = isCategory ? await this.categoryLegend(field) : this.colorbarLegend(view);
     if (render !== this.legendRenders) return;
 
-    this.legendLabel.textContent = colorLabel(view.color, this.manifest.gene_sources[0].name);
+    this.legendLabel.textContent = colorLabel(view.color, this.manifest.gene_sources);
     this.legendSortSelect.hidden = !isCategory;
     this.legendClear.hidden = !isCategory;
     this.legendBody.replaceChildren(...body);
@@ -1042,8 +1048,8 @@ class App {
 }
 
 // Embed mode, for a widget in another page's iframe: a bar over the view's top left with a toggle between compact
-// controls (side panel hidden; the cell count, color menu and reset button in the bar) and the full side panel, and
-// a full screen button. controls (compact by default) sets the controls it opens with
+// controls (side panel hidden; the cell count, color menu, gene box and reset button in the bar) and the full side
+// panel, and a full screen button. controls (compact by default) sets the controls it opens with
 const EMBED_CONTROLS = ['compact', 'full'];
 
 function showEmbedBar(controlsMode) {
@@ -1056,11 +1062,11 @@ function showEmbedBar(controlsMode) {
   passPlainScrollsToPage();
 }
 
-// Marks the places of the cell count, color menu and reset button in the side panel and returns a function that
-// switches between compact controls (true: side panel hidden, the controls moved into the bar, where their listeners
-// still work) and the full side panel with the controls back in place (false)
+// Marks the places of the cell count, color menu, gene box and reset button in the side panel and returns a function
+// that switches between compact controls (true: side panel hidden, the controls moved into the bar, where their
+// listeners still work) and the full side panel with the controls back in place (false)
 function borrowControls(bar) {
-  const homes = ['count', 'color-field', 'reset-rotation'].map((id) => {
+  const homes = ['count', 'color-field', 'gene-box', 'reset-rotation'].map((id) => {
     const control = document.getElementById(id);
     const home = document.createComment(id);
     control.before(home);

@@ -76,6 +76,13 @@ export function colorCategories(codes, palette) {
 }
 
 // Per-cell RGB for numbers scaled from lo (dark) to hi (bright); NaN is grey
+// Colors of one gene's values from 0 to hi: counts on a log scale (log1p), so a few high cells do not wash out the
+// rest; values already on a log scale (a source's scale, e.g. 'log2') linearly
+export function geneColors(values, hi, scale) {
+  if (scale) return colorValues(values, 0, hi);
+  return colorValues(Float32Array.from(values, Math.log1p), 0, Math.log1p(hi));
+}
+
 export function colorValues(values, lo, hi) {
   // Precompute 256 colors once instead of interpolating per cell
   const table = Array.from({ length: 256 }, (_, i) => colormap(i / 255));
