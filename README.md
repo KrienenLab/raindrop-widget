@@ -13,16 +13,20 @@
   MSCA v4 cell types (Class, Group) in the AIBS colors, a Basal ganglia column (Striatum, GPe, GPi, STN, SN by cell
   type, only inside the AIBS basal ganglia region; other cells NA in grey) that the widget opens on, and the 300-gene
   panel as log2(counts per thousand + 1), one byte per cell.
+- `widget.html`: the page to embed: a Mouse | Marmoset toggle above one viewer.
 - `index.html`: a demo page embedding the widget.
 
 ## Embedding
 
 ```html
-<iframe src="https://krienenlab.github.io/raindrop-widget/raindrop/?data=../data/WMB_Yao2023_MERFISH_250k/&embed=1"
+<iframe src="https://krienenlab.github.io/raindrop-widget/widget.html"
         style="width:100%; height:90vh; border:0" allowfullscreen loading="lazy"></iframe>
 ```
 
-For the marmoset, use `?data=../data/HMBA_marmoset_Xenium_tank_250k/&embed=1`.
+The Mouse | Marmoset buttons switch datasets and record the choice in the address (`widget.html#mouse`,
+`widget.html#marmoset`), so a link can open either; mouse is the default. One dataset alone, without the toggle:
+`raindrop/?data=../data/WMB_Yao2023_MERFISH_250k/&embed=1` or
+`raindrop/?data=../data/HMBA_marmoset_Xenium_tank_250k/&embed=1`.
 
 `&controls=full` opens with every control shown (default `compact`; the widget's More / Fewer controls button
 switches). Type a gene in the box beside the color menu to color by it. Plain scrolling over the widget scrolls the page; Ctrl + scroll (Cmd on a Mac) or a pinch zooms.

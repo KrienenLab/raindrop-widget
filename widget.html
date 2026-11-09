@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raindrop brain viewers</title>
+  <style>
+    /* The toggle on top, the viewer filling the rest of the frame */
+    html, body { margin: 0; height: 100%; background: #fff; font-family: system-ui, sans-serif; }
+    body { display: flex; flex-direction: column; }
+    nav { display: flex; gap: 0; padding: 4px; }
+    nav button { padding: 3px 12px; font: inherit; font-size: 13px; border: 1px solid #999; background: #f4f4f4; color: #222; cursor: pointer; }
+    nav button + button { border-left: 0; }
+    nav button:first-child { border-radius: 4px 0 0 4px; }
+    nav button:last-child { border-radius: 0 4px 4px 0; }
+    nav button[aria-pressed="true"] { background: #1e2a3a; border-color: #1e2a3a; color: #fff; }
+    iframe { flex: 1; width: 100%; border: 0; display: block; }
+  </style>
+</head>
+<body>
+  <nav aria-label="Dataset">
+    <button type="button" data-dataset="mouse">Mouse</button>
+    <button type="button" data-dataset="marmoset">Marmoset</button>
+  </nav>
+  <iframe id="viewer" title="Brain cell atlas, 3D viewer" allowfullscreen></iframe>
+  <script>
+    // Embed URL of each dataset; the hash (#mouse, #marmoset) picks one, mouse by default
+    const DATASETS = {
+      mouse: 'raindrop/?data=../data/WMB_Yao2023_MERFISH_250k/&embed=1',
+      marmoset: 'raindrop/?data=../data/HMBA_marmoset_Xenium_tank_250k/&embed=1',
+    };
+    const viewer = document.getElementById('viewer');
+    const buttons = document.querySelectorAll('nav button');
+
+    function datasetFromHash() {
+      const name = location.hash.slice(1);
+      return name in DATASETS ? name : 'mouse';
+    }
+
+    // Load a dataset into the viewer frame (only when it changes) and mark its button
+    function show(name) {
+      const src = new URL(DATASETS[name], location.href).href;
+      if (viewer.src !== src) viewer.src = src;
+      buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.dataset === name)));
+    }
+
+    // replaceState keeps the choice in the URL without adding history entries to the host page
+    buttons.forEach((b) => b.addEventListener('click', () => {
+      history.replaceState(null, '', '#' + b.dataset.dataset);
+      show(b.dataset.dataset);
+    }));
+    window.addEventListener('hashchange', () => show(datasetFromHash()));
+    show(datasetFromHash());
+  </script>
+</body>
+</html>
