@@ -105,7 +105,7 @@ export const EXTENT_PER_UNIT_POINT_SIZE = 200;
 
 // Diameter in CSS px of a point of relative size `size` (2^slider) at the data's center when the view is framed:
 // size * extent / EXTENT_PER_UNIT_POINT_SIZE data units, at the framing distance fitDistance, where the tile's height
-// (tileCssHeight CSS px) shows 2 tan(fov / 2) world units per unit of distance. The size readouts show it; it does not
+// (tileCssHeight CSS px) shows 2 tan(fov / 2) world units per unit of distance. The size boxes show it; it does not
 // follow zoom, as it names the framed size
 export function framedDiameterPx(size, extent, fitDistance, tileCssHeight, fovDegrees) {
   const pxPerUnitAtDistance1 = tileCssHeight / (2 * Math.tan(fovDegrees * Math.PI / 360));

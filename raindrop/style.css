@@ -60,16 +60,18 @@ button:hover { border-color: var(--accent); }
 .slider { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; }
 .slider input { width: 55%; }
 .slider input[type=checkbox] { width: auto; }
-/* Point size and opacity of shown and filtered-out cells: a row per group, a slider and its readout per setting. The
-   readouts have a fixed width, so the widest value ('15.5 px', '100%') cannot widen the side panel */
+/* Point size and opacity of shown and filtered-out cells: a row per group, a slider and its number box per setting.
+   The boxes have a fixed width, so the widest value ('15.5', '100') cannot widen the side panel; they have no spin
+   buttons, which would not fit (arrow keys still step) */
 #cell-styles { width: 100%; border-collapse: collapse; margin: 4px 0; table-layout: fixed; }
 #cell-styles th { text-align: left; font-weight: normal; }
 #cell-styles thead th { font-size: 11px; color: var(--muted); font-weight: 600; }
 #cell-styles col.group { width: 76px; }
-#cell-styles col.readout { width: 46px; }
+#cell-styles col.box { width: 46px; }
 #cell-styles td { padding: 1px 2px; }
 #cell-styles input[type=range] { width: 100%; }
-#cell-styles output { display: block; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+#cell-styles input[type=number] { padding: 2px 3px; text-align: right; font-variant-numeric: tabular-nums; appearance: textfield; }
+#cell-styles input[type=number]::-webkit-inner-spin-button { appearance: none; }
 /* Turn about menu above the rotation table; [hidden] must win over display: flex (2D views hide it) */
 .turn-about { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; }
 .turn-about[hidden] { display: none; }

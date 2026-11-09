@@ -28,24 +28,26 @@
       <button id="reset-rotation" title="Set every angle to 0 degrees">Reset rotation</button>
       <label class="slider">Show axes <input id="show-axes" type="checkbox" checked></label>
       <!-- Point size and opacity of the cells passing the filters (Shown) and of the filtered-out cells, each slider
-           with its readout (app.js): the point diameter in CSS px when the view is framed, opacities in percent -->
+           with a number box (app.js) to read or type the value: the point diameter in CSS px when the view is framed
+           (disabled until then), opacities in percent. A dataset can set their starting values (convert.py
+           --start-style, which checks sizes against the size sliders' range, -4 to 3 in log2) -->
       <table id="cell-styles" aria-label="Point size and opacity of shown and filtered-out cells">
-        <colgroup><col class="group"><col><col class="readout"><col><col class="readout"></colgroup>
-        <thead><tr><th></th><th colspan="2">Point size</th><th colspan="2">Opacity</th></tr></thead>
+        <colgroup><col class="group"><col><col class="box"><col><col class="box"></colgroup>
+        <thead><tr><th></th><th colspan="2">Point size (px)</th><th colspan="2">Opacity (%)</th></tr></thead>
         <tbody>
           <tr>
             <th>Shown</th>
             <td><input id="point-size" type="range" min="-4" max="3" step="0.1" value="0" title="Point size of shown cells (log scale)"></td>
-            <td><output for="point-size" title="Diameter when the whole view is in frame, in CSS px"></output></td>
+            <td><input id="point-size-box" type="number" step="0.1" disabled title="Diameter when the whole view is in frame, in CSS px"></td>
             <td><input id="shown-opacity" type="range" min="0" max="1" step="0.01" value="1" title="Opacity of shown cells. Below 100% the nearest cell stays on top; cells behind show through only where they were drawn earlier. Points smaller than a pixel blend in the order cells are stored"></td>
-            <td><output for="shown-opacity"></output></td>
+            <td><input id="shown-opacity-box" type="number" min="0" max="100" step="1" title="Opacity in percent"></td>
           </tr>
           <tr>
             <th>Filtered out</th>
             <td><input id="context-point-size" type="range" min="-4" max="3" step="0.1" value="0" title="Point size of filtered-out cells (log scale). Points smaller than a pixel are drawn a pixel wide and fainter, by the share of the pixel they cover"></td>
-            <td><output for="context-point-size" title="Diameter when the whole view is in frame, in CSS px"></output></td>
+            <td><input id="context-point-size-box" type="number" step="0.1" disabled title="Diameter when the whole view is in frame, in CSS px"></td>
             <td><input id="context-opacity" type="range" min="0" max="1" step="0.01" value="0.08" title="Opacity of filtered-out cells. Below 100% they blend over shown cells behind them. Opaque shown cells hide them, and stay on top at equal depth while their points are at least a pixel wide"></td>
-            <td><output for="context-opacity"></output></td>
+            <td><input id="context-opacity-box" type="number" min="0" max="100" step="1" title="Opacity in percent"></td>
           </tr>
         </tbody>
       </table>

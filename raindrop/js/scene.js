@@ -629,7 +629,7 @@ export class PointCloudView {
   }
 
   // Diameter in CSS px of a point of relative size `size` when the view is framed (positions.framedDiameterPx), for
-  // the size readouts
+  // the size boxes
   framedDiameter(size) {
     return framedDiameterPx(size, this.extent, this.fit, this.container.clientHeight, this.camera.fov);
   }
