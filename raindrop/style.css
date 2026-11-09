@@ -175,6 +175,12 @@ body.compact #legend { width: clamp(220px, 22vw, 360px); }
              background: rgba(0, 0, 0, 0.7); color: #fff; font-size: 15px; pointer-events: none; }
 #zoom-hint[hidden] { display: none; }
 
+/* Hover label: the pointed-at cell's swatch and value beside the pointer (app.js places it); it must not take the
+   pointer's events, or the tile would see the pointer leave */
+.hover-label { position: absolute; display: flex; align-items: center; gap: 5px; padding: 3px 7px; border: 1px solid var(--border);
+               border-radius: 4px; background: rgba(255, 255, 255, 0.92); white-space: nowrap; pointer-events: none; }
+.hover-label[hidden] { display: none; }
+
 /* Axes labels: tick values and axis names placed over the view by axes.updateAxisLabels */
 .axis-labels { position: absolute; inset: 0; pointer-events: none; }
 .axis-labels span { position: absolute; transform: translate(-50%, -50%); white-space: nowrap; }

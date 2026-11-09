@@ -19,10 +19,14 @@
 //
 // Several views can be shown at once (a grid): one WebGL canvas (SharedCanvas) lies behind them all, and each
 // view draws only into the rectangle of its tile, an element over the canvas that also takes its mouse input.
+//
+// Hover: pointing at a shown cell (or tapping it on a touch screen) reports it through onHover, for the page's label.
+// The cells are looked up in a screen grid (picking.js) built on the first lookup after the picture changed.
 import * as THREE from 'three';
 import { TrackballControls } from '../vendor/TrackballControls.js';
 import { EXTENT_PER_UNIT_POINT_SIZE, framedDiameterPx } from './positions.js';
 import { dragDirection, knobTurn, recentMovement, wrapTurns } from './rotation.js';
+import { buildScreenGrid, makeProjection, nearestCell, projectShownCells } from './picking.js';
 
 // White page behind the points
 const BACKGROUND_COLOR = 0xffffff;
@@ -58,6 +62,10 @@ const CLIP_FAR_MULTIPLE = 10;
 const CLIP_FAR_RADII = 4;
 // The framing distance leaves this much more room than a tight fit, for the axes labels around the data
 const FRAME_MARGIN = 1.12;
+// Hover: a cell counts as pointed at within this many CSS px of the pointer, or within its drawn radius if larger
+const HOVER_RADIUS_PX = 4;
+// A touch that moves at most this many CSS px between down and up is a tap (more is a drag that turns or pans)
+const TAP_SLOP_PX = 8;
 
 // Vertex shader. A cell is drawn by this Points object only if its state equals uDrawState (states are whole
 // numbers, compared with a margin of 0.5 as floats). Point size (gl_PointSize, device px, the point's diameter)
@@ -186,11 +194,13 @@ export class PointCloudView {
 
     // Callbacks set by the page: onRotate(degrees) after a drag turned the data; onRender after every drawn
     // frame (e.g. to redraw the axis widget); onCameraChange when zoom or pan moved the camera; onResize after the
-    // tile's size, and so the framed point size, changed
+    // tile's size, and so the framed point size, changed; onHover(cell, pointer) when the pointer or a tap points at
+    // a shown cell (its index; pointer in tile CSS px), or at none (cell -1: hide the label)
     this.onRotate = () => {};
     this.onRender = () => {};
     this.onCameraChange = () => {};
     this.onResize = () => {};
+    this.onHover = () => {};
     // The data's turns (radians) about its own x, y and z axes, as the sliders show them: every turn adds its
     // parts about each axis of the data as it points then (see addTurns), so they depend on the order of turns;
     // and the data axis that drags turn about (null: any, as a turntable; see turnByDrag)
@@ -200,6 +210,16 @@ export class PointCloudView {
     this.upAxis = new THREE.Vector3(0, 1, 0);
     this.listenForDrags();
     this.listenFor2DNavigation();
+    // Hover: the projected shown cells and their screen grid (buffers kept for the next build), whether they are
+    // out of date (from any change of the picture, see render, until the next lookup), the animation frame of a
+    // pending lookup (null: none), and whether a cell is being reported
+    this.projection = null;
+    this.pickGrid = null;
+    this.pickStale = true;
+    this.pickMatrix = new THREE.Matrix4();
+    this.pendingLookup = null;
+    this.hovering = false;
+    this.listenForHover();
 
     this.pointSize = 1;
     this.contextPointSize = 1;
@@ -440,6 +460,126 @@ export class PointCloudView {
     };
     tile.addEventListener('pointerup', stop);
     tile.addEventListener('pointercancel', stop);
+  }
+
+  // Hover: a mouse or pen move with no button pressed (a pressed one drags: turns, pans or zooms), a mouse release,
+  // or a touch tap asks for a lookup of the cell under the pointer on the next animation frame, so there is at most
+  // one per frame; a move before it only updates the pointer. Leaving the tile withdraws the label (a touch is
+  // followed by pointerleave on release, so touches are left out; a mouse released outside the tile gets its
+  // pointerleave then, as TrackballControls captures the pointer while pressed). A press cancels a pending lookup.
+  // A tap is one finger down and up again, never more than TAP_SLOP_PX from where it went down, with no other finger
+  // down meanwhile (a pinch);
+  // pointercancel ends it without a lookup. Pens tap like mice: no label until they hover
+  listenForHover() {
+    const tile = this.container;
+    // The pointer of the pending lookup; the touches down (pointerId -> where), and whether the current touch
+    // gesture can still be a tap (one finger that has not moved more than TAP_SLOP_PX from where it went down)
+    let pointer = null;
+    const touches = new Map();
+    let tapping = false;
+    const at = (event) => {
+      const rect = tile.getBoundingClientRect();
+      return [event.clientX - rect.left, event.clientY - rect.top];
+    };
+    const lookUpSoon = (event) => {
+      pointer = at(event);
+      if (this.pendingLookup === null) {
+        this.pendingLookup = requestAnimationFrame(() => {
+          this.pendingLookup = null;
+          this.reportCellAt(pointer);
+        });
+      }
+    };
+    const cancel = () => {
+      cancelAnimationFrame(this.pendingLookup);
+      this.pendingLookup = null;
+    };
+    tile.addEventListener('pointermove', (event) => {
+      if (event.pointerType !== 'touch') {
+        if (event.buttons === 0) lookUpSoon(event);
+        return;
+      }
+      const start = touches.get(event.pointerId);
+      const [x, y] = at(event);
+      if (start && Math.hypot(x - start[0], y - start[1]) > TAP_SLOP_PX) tapping = false;
+    });
+    tile.addEventListener('pointerleave', (event) => {
+      if (event.pointerType === 'touch') return;
+      cancel();
+      this.hovering = false;
+      this.onHover(-1);
+    });
+    tile.addEventListener('pointerdown', (event) => {
+      cancel();
+      if (event.pointerType !== 'touch') return;
+      // The first finger may start a tap; a second one makes the gesture a pinch
+      tapping = touches.size === 0;
+      touches.set(event.pointerId, at(event));
+    });
+    tile.addEventListener('pointerup', (event) => {
+      if (event.pointerType !== 'touch') {
+        if (event.buttons === 0) lookUpSoon(event);
+        return;
+      }
+      const start = touches.get(event.pointerId);
+      touches.delete(event.pointerId);
+      if (start && tapping) lookUpSoon(event);
+    });
+    tile.addEventListener('pointercancel', (event) => {
+      touches.delete(event.pointerId);
+      tapping = false;
+    });
+  }
+
+  // Report the cell under `pointer` (tile CSS px), or none, through onHover
+  reportCellAt(pointer) {
+    const cell = this.cellAt(pointer);
+    this.hovering = cell >= 0;
+    this.onHover(cell, pointer);
+  }
+
+  // The shown cell to label at `pointer` (tile CSS px), or -1: the one nearest the camera within the pick radius
+  // (picking.nearestCell). The radius is HOVER_RADIUS_PX, or the radius of a shown point at the target's distance if
+  // larger: its diameter in device px as in VERTEX_SHADER, / devicePixelRatio for CSS px, / 2. Cells nearer than the
+  // target are drawn larger than that, so their edges may not count. Filtered-out cells are skipped even when,
+  // opaque, they are drawn over shown ones. None while shown cells are not drawn (opacity 0) or before positions
+  // are set
+  cellAt(pointer) {
+    if (!this.shown.visible || !this.geometry.getAttribute('state')) return -1;
+    const distance = this.camera.position.distanceTo(this.controls.target);
+    const diameterDevicePx = this.shown.material.uniforms.uSize.value * this.uniforms.uScale.value / distance;
+    const diameterPx = diameterDevicePx / this.renderer.getPixelRatio();
+    const radiusPx = Math.max(HOVER_RADIUS_PX, diameterPx / 2);
+    if (this.pickStale) this.buildPickGrid(Math.ceil(radiusPx));
+    return nearestCell(this.projection, this.pickGrid, pointer[0], pointer[1], radiusPx);
+  }
+
+  // Project the shown cells to the tile and sort them into buckets of bucketPx (picking.js), reusing the previous
+  // buffers (new ones when the cell count changed). The matrix maps data to clip: the points' placement in the world
+  // (data center shifted and turned with `model`), then world to camera (matrixWorldInverse), then the projection.
+  // render() only asks for a frame, and three.js updates these matrices when it draws, so they are updated here
+  // first. Cost: about 30-70 ms at 750k shown cells (node, job 7402990), paid on the first lookup after each change,
+  // so a mouse moving during a scroll zoom rebuilds once per frame (a possible optimization: wait for the picture to
+  // settle)
+  buildPickGrid(bucketPx) {
+    const { clientWidth: width, clientHeight: height } = this.container;
+    const xyz = this.geometry.getAttribute('position').array;
+    const state = this.geometry.getAttribute('state').array;
+    this.model.updateMatrixWorld();
+    this.camera.updateMatrixWorld();
+    const matrix = this.pickMatrix
+      .multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse)
+      .multiply(this.points.matrixWorld);
+    if (this.projection?.cells.length !== state.length) this.projection = makeProjection(state.length);
+    projectShownCells(this.projection, xyz, state, SHOWN_STATE, matrix.elements, width, height);
+    this.pickGrid = buildScreenGrid(this.pickGrid, this.projection, width, height, bucketPx);
+    this.pickStale = false;
+  }
+
+  // A cell's color as drawn when shown: [r, g, b], 0..255 (setColors)
+  cellColor(cell) {
+    const { array } = this.geometry.getAttribute('color');
+    return [array[3 * cell], array[3 * cell + 1], array[3 * cell + 2]];
   }
 
   // The data direction (e.g. toward dorsal) that sideways drags spin the data about
@@ -725,9 +865,16 @@ export class PointCloudView {
     this.render();
   }
 
-  // Ask for the next frame to draw every view (see SharedCanvas)
+  // Ask for the next frame to draw every view (see SharedCanvas). Every change of the picture (camera, rotation,
+  // positions, states, sizes, opacities, colors, tile size or place) comes here, so the hover grid is dropped and a
+  // reported cell is withdrawn: the next pointer move or tap looks up again
   render() {
     this.canvas.requestDraw();
+    this.pickStale = true;
+    if (this.hovering) {
+      this.hovering = false;
+      this.onHover(-1);
+    }
   }
 
   // Draw into the tile's rectangle of the shared canvas. setViewport and setScissor take CSS px from the
@@ -751,6 +898,10 @@ export class PointCloudView {
   // Stop drawing this view and free its GPU buffers (its tile is removed by the caller)
   dispose() {
     this.canvas.views.delete(this);
+    cancelAnimationFrame(this.pendingLookup);
+    this.projection = null;
+    this.pickGrid = null;
+    this.pickStale = true;
     this.controls.dispose();
     this.geometry.dispose();
     this.axesBox.geometry.dispose();

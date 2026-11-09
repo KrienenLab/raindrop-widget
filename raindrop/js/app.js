@@ -8,8 +8,10 @@ import { clampDegrees, faceRotation, openingTurnAxis } from './rotation.js';
 import { buildAxisLabels, buildAxisWidget, updateAxisLabels, updateAxisWidget, WIDGET_HALF_SIZE } from './axes.js';
 import { Categories } from './categories.js';
 import { Coloring } from './coloring.js';
+import { toHex } from './colors.js';
 import { EMBED_CONTROLS, showEmbedBar } from './embed.js';
 import { Legend } from './legend.js';
+import { cellValueText } from './names.js';
 import { FilterPanels } from './panels.js';
 import { Turning } from './turning.js';
 import { el, formatCount, svg } from './ui.js';
@@ -25,6 +27,9 @@ const SHOWN_STATE = 2;
 const REVERSED_NOTE = 'Showing everything except the selection';
 const NO_EFFECT_NOTE = 'No filter set: Reverse has no effect';
 const REVERSED_COUNT_MARK = ' (all except the selection)';
+// The hover label sits this many CSS px from the pointer, right of and below it (left of or above it in the tile's
+// right or bottom half, so it stays inside the tile)
+const HOVER_LABEL_OFFSET_PX = 12;
 
 // The controls each key of the manifest's defaults.style (convert.py --start-style) sets: sizes (multiples of the
 // default size) on the log2 size sliders, opacities (fractions) on the opacity sliders, keep_colors on the switch
@@ -119,6 +124,9 @@ class App {
     this.coloring.buildColorControls();
     this.legend.buildLegend();
     this.panels.listenForAddFilter();
+    // A press anywhere (a drag starting, or a tap elsewhere, including the side panel) hides the hover labels; a tap
+    // on a cell shows its label again on release. Capture, so a handler that stops the event cannot keep it
+    window.addEventListener('pointerdown', () => this.hideHoverLabels(), { capture: true });
 
     const view = this.createView();
     this.select(view);
@@ -334,11 +342,13 @@ class App {
     const widgetElement = svg('svg', {
       class: 'axis-widget', viewBox: `${-half} ${-half} ${2 * half} ${2 * half}`, 'aria-label': 'Orientation of the data axes',
     });
-    const tile = el('div', { className: 'tile' }, [axisLabelsElement, tileLegend, widgetElement]);
+    // The hover label: the pointed-at cell's color swatch and value (showHoverLabel)
+    const hoverLabel = el('div', { className: 'hover-label', hidden: true }, [el('span', { className: 'swatch' }), el('span')]);
+    const tile = el('div', { className: 'tile' }, [axisLabelsElement, tileLegend, widgetElement, hoverLabel]);
     document.getElementById('tiles').append(tile);
     const linkButton = this.grid.buildLinkButton(tile);
 
-    const view = { tile, axisLabelsElement, tileLegend, widgetElement, linkButton, color: null, linked: true, settings: this.group };
+    const view = { tile, axisLabelsElement, tileLegend, widgetElement, hoverLabel, linkButton, color: null, linked: true, settings: this.group };
     linkButton.addEventListener('click', () => this.grid.toggleLink(view));
     view.scene = new PointCloudView(tile, this.canvas);
     view.widgetAxes = buildAxisWidget(widgetElement);
@@ -355,6 +365,7 @@ class App {
       updateAxisWidget(view);
       updateAxisLabels(view, this.manifest);
     };
+    view.scene.onHover = (cell, pointer) => this.showHoverLabel(view, cell, pointer);
     tile.addEventListener('pointerdown', () => this.select(view));
     this.views.push(view);
     this.grid.layoutViews();
@@ -485,6 +496,34 @@ class App {
     const note = document.getElementById('reverse-note');
     note.hidden = !this.settings.reverseFilters;
     note.textContent = this.isReversed(this.settings) ? REVERSED_NOTE : NO_EFFECT_NOTE;
+  }
+
+  // Show the hover label of a view for `cell` beside `pointer` (tile CSS px), hiding every other view's; cell -1, or a
+  // view not colored yet, hides only this view's (another view may show the label now). The text is the cell's value
+  // for what the view's colors show (view.cellValues, see Coloring.setColor), the swatch the cell's color
+  showHoverLabel(view, cell, pointer) {
+    if (cell < 0 || !view.cellValues) {
+      view.hoverLabel.hidden = true;
+      return;
+    }
+    this.hideHoverLabels();
+    const { color, values } = view.cellValues;
+    const field = color.kind === 'field' ? this.dataset.fields.get(color.name) : null;
+    const [swatch, text] = view.hoverLabel.children;
+    swatch.style.background = toHex(view.scene.cellColor(cell));
+    text.textContent = cellValueText(color, field, values[cell], this.manifest.gene_sources);
+    // At the pointer, then shifted by the offset, or by the label's own size plus the offset to the other side
+    const [x, y] = pointer;
+    const { clientWidth: width, clientHeight: height } = view.tile;
+    const shift = (isFarHalf) => (isFarHalf ? `calc(-100% - ${HOVER_LABEL_OFFSET_PX}px)` : `${HOVER_LABEL_OFFSET_PX}px`);
+    view.hoverLabel.style.left = `${x}px`;
+    view.hoverLabel.style.top = `${y}px`;
+    view.hoverLabel.style.transform = `translate(${shift(x > width / 2)}, ${shift(y > height / 2)})`;
+    view.hoverLabel.hidden = false;
+  }
+
+  hideHoverLabels() {
+    for (const view of this.views) view.hoverLabel.hidden = true;
   }
 
   setStatus(message) {

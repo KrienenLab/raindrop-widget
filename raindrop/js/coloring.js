@@ -70,12 +70,17 @@ export class Coloring {
   }
 
   // Color a view by `color`: { kind: 'field', name } for an obs column, or { kind: 'gene', source, name }; its
-  // tile's corner names it (shown with several views)
+  // tile's corner names it (shown with several views). view.cellValues keeps the per-cell values the colors were
+  // made from, with their color, for the hover label; both are set together once loaded, so the label never pairs a
+  // new color with the old values
   async setColor(view, color) {
     view.color = color;
     this.setStatus(`Loading ${color.name}...`);
-    const rgb = color.kind === 'gene' ? await this.geneColors(view, color) : await this.fieldColors(view, color);
+    const isGene = color.kind === 'gene';
+    const values = await (isGene ? this.dataset.geneValues(color.source, color.name) : this.dataset.fieldValues(color.name));
+    const rgb = isGene ? this.geneColors(view, color, values) : this.fieldColors(view, color, values);
     view.scene.setColors(rgb);
+    view.cellValues = { color, values };
     view.tileLegend.textContent = colorLabel(color, this.manifest.gene_sources);
     if (view === this.selectedView()) {
       this.showColorControls(view);
@@ -87,8 +92,7 @@ export class Coloring {
   // Genes: the scale runs from 0 to the 99th percentile of the expressing (positive) cells, so zero is darkest
   // and the top 1% saturate; counts are colored by log(1 + count) (colors.geneColors), and view.colorRange
   // keeps the values (not their logs) for the legend
-  async geneColors(view, color) {
-    const values = await this.dataset.geneValues(color.source, color.name);
+  geneColors(view, color, values) {
     const expressed = sortedFinite(values, true);
     view.colorRange = [0, expressed.length ? quantile(expressed, 1 - OUTLIER_FRACTION) : 1];
     const { scale } = this.manifest.gene_sources.find((s) => s.name === color.source);
@@ -96,9 +100,8 @@ export class Coloring {
   }
 
   // Categories use the palette; numbers span their middle 98% (view.colorRange), from 0 to 1 when none is finite
-  async fieldColors(view, color) {
+  fieldColors(view, color, values) {
     const field = this.dataset.fields.get(color.name);
-    const values = await this.dataset.fieldValues(color.name);
     if (field.kind === 'category') return colorCategories(values, this.categories.palette(field));
     const finite = sortedFinite(values);
     view.colorRange = finite.length ? [quantile(finite, OUTLIER_FRACTION), quantile(finite, 1 - OUTLIER_FRACTION)] : [0, 1];
