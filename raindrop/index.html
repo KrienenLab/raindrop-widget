@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Raindrop</title>
   <link rel="stylesheet" href="style.css">
-  <!-- three.js is vendored, so the viewer works without a CDN -->
+  <!-- three.js is vendored, so the viewer works without a CDN; scene.js imports it as 'three' -->
   <script type="importmap">
     { "imports": { "three": "./vendor/three.module.min.js" } }
   </script>
@@ -27,9 +27,29 @@
       <table id="rotation" aria-label="Rotation: slider, angle and reset per axis"></table>
       <button id="reset-rotation" title="Set every angle to 0 degrees">Reset rotation</button>
       <label class="slider">Show axes <input id="show-axes" type="checkbox" checked></label>
-      <label class="slider">Point size <input id="point-size" type="range" min="-4" max="1" step="0.1" value="0" title="Point size (log scale)"></label>
-      <label class="slider">Shown cells <input id="shown-opacity" type="range" min="0.05" max="1" step="0.01" value="1"></label>
-      <label class="slider">Filtered-out cells <input id="context-opacity" type="range" min="0" max="0.4" step="0.01" value="0.08"></label>
+      <!-- Point size and opacity of the cells passing the filters (Shown) and of the filtered-out cells, each slider
+           with its readout (app.js): the point diameter in CSS px when the view is framed, opacities in percent -->
+      <table id="cell-styles" aria-label="Point size and opacity of shown and filtered-out cells">
+        <colgroup><col class="group"><col><col class="readout"><col><col class="readout"></colgroup>
+        <thead><tr><th></th><th colspan="2">Point size</th><th colspan="2">Opacity</th></tr></thead>
+        <tbody>
+          <tr>
+            <th>Shown</th>
+            <td><input id="point-size" type="range" min="-4" max="3" step="0.1" value="0" title="Point size of shown cells (log scale)"></td>
+            <td><output for="point-size" title="Diameter when the whole view is in frame, in CSS px"></output></td>
+            <td><input id="shown-opacity" type="range" min="0" max="1" step="0.01" value="1" title="Opacity of shown cells. Below 100% the nearest cell stays on top; cells behind show through only where they were drawn earlier. Points smaller than a pixel blend in the order cells are stored"></td>
+            <td><output for="shown-opacity"></output></td>
+          </tr>
+          <tr>
+            <th>Filtered out</th>
+            <td><input id="context-point-size" type="range" min="-4" max="3" step="0.1" value="0" title="Point size of filtered-out cells (log scale). Points smaller than a pixel are drawn a pixel wide and fainter, by the share of the pixel they cover"></td>
+            <td><output for="context-point-size" title="Diameter when the whole view is in frame, in CSS px"></output></td>
+            <td><input id="context-opacity" type="range" min="0" max="1" step="0.01" value="0.08" title="Opacity of filtered-out cells. Below 100% they blend over shown cells behind them. Opaque shown cells hide them, and stay on top at equal depth while their points are at least a pixel wide"></td>
+            <td><output for="context-opacity"></output></td>
+          </tr>
+        </tbody>
+      </table>
+      <label class="slider">Filtered-out cells keep their colors <input id="context-colors" type="checkbox" checked></label>
     </section>
 
     <section>
@@ -44,16 +64,19 @@
 
     <section>
       <h2>Filters</h2>
+      <!-- Reverse swaps shown and filtered-out cells; the note under it (app.js) says so while it is on -->
+      <label class="slider" title="Show the cells the filters leave out, and filter out the cells they keep. The ticked values stay as they are. No effect while no filter is set">Reverse <input id="reverse-filters" type="checkbox"></label>
+      <p class="hint" id="reverse-note" hidden></p>
       <div id="filters"></div>
       <select id="add-filter" aria-label="Add filter"></select>
     </section>
   </aside>
 
   <main id="view">
-    <!-- One tile per view, over a shared canvas (scene.js); each holds its axis labels, legend and widget -->
+    <!-- One tile per view, over a shared canvas (scene.js); each holds its axis labels, legend, widget and link button -->
     <div id="tiles"></div>
-    <!-- With ?embed=1 (a widget on another page) the side panel is hidden and app.js moves the cell count, color
-         menu and reset button here -->
+    <!-- With ?embed=1 (a widget on another page) embed.js shows this bar; with compact controls it hides the side
+         panel and moves the cell count, color menu, gene box and reset button here -->
     <div id="embed-bar" hidden></div>
     <!-- Shown for a moment when a plain scroll over an embedded view scrolls the page instead of zooming -->
     <div id="zoom-hint" hidden></div>
