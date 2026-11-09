@@ -37,14 +37,22 @@
       return name in DATASETS ? name : 'mouse';
     }
 
-    // Load a dataset into the viewer frame (only when it changes) and mark its button
+    let shown = null;
+
+    // Load a dataset into the viewer frame (only when it changes) and mark its button. After the first load,
+    // location.replace swaps the frame's page without a history entry; setting src again would add one, so the host
+    // page's Back button would step the frame back to the other dataset
     function show(name) {
-      const src = new URL(DATASETS[name], location.href).href;
-      if (viewer.src !== src) viewer.src = src;
+      if (name !== shown) {
+        const src = new URL(DATASETS[name], location.href).href;
+        if (shown === null) viewer.src = src;
+        else viewer.contentWindow.location.replace(src);
+        shown = name;
+      }
       buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.dataset === name)));
     }
 
-    // replaceState keeps the choice in the URL without adding history entries to the host page
+    // replaceState keeps the choice in the URL without adding a history entry either
     buttons.forEach((b) => b.addEventListener('click', () => {
       history.replaceState(null, '', '#' + b.dataset.dataset);
       show(b.dataset.dataset);
