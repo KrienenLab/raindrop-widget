@@ -12,7 +12,7 @@
  },
  "defaults": {
   "embedding": "spatial",
-  "color": "Class",
+  "color": "Subclass (BG taxonomy)",
   "filters": [
    "Basal ganglia",
    "Subclass (BG taxonomy)",
