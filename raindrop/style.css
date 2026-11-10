@@ -235,6 +235,18 @@ body.compact #legend { width: clamp(220px, 22vw, 360px); }
      datalist arrow. From 152 px the box would drop below the mouse widget's color menu on a 360 px phone */
   #embed-bar #gene { width: 131px; }
 }
+/* Phones, and landscape phones and frames up to 700 px wide (small tablets keep the rule above): when the dataset has
+   genes, the compact bar's count takes a row of its own, so the Color menu and the gene box share the next. The bar
+   wraps on the gene box's base width (its 80 px, plus the source menu when shown), so the box stays beside the Color
+   menu wherever 80 px are left (iOS draws the menu wider than Chromium); then the box and its wrapper grow into the
+   rest of the row, the box up to the 131 px that show its whole placeholder in Chromium (iOS may clip its end). In a
+   frame wide enough for the menus and buttons at that base width (about 640-700 px), the bar sizes itself to them
+   and the buttons sit beside the two menu rows rather than below */
+@media (max-width: 700px) {
+  #embed-bar .bar-controls:has(> #gene-box:not([hidden])) #count { flex-basis: 100%; }
+  #embed-bar .gene-box { flex-grow: 1; }
+  #embed-bar #gene { width: 80px; flex-grow: 1; max-width: 131px; }
+}
 /* Phones in landscape (at most 500 px tall, at least 600 px wide): stacked panels would leave the view a strip, so
    they stay beside it, narrower (undoing the rule above where it also matched): 440 px of panels leave the view at
    least 160 px, and 40% of the width from 740 px. Narrower landscape frames stay stacked */
