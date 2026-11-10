@@ -47,9 +47,31 @@
       return name in DATASETS ? name : 'mouse';
     }
 
+    // Narrowest widget, in CSS px, that opens with full controls: the viewer's side panel would cover most of a
+    // phone's screen in portrait (390-430 px wide), while a tablet in portrait (768 px and up) or a page column on a
+    // computer still shows the cells beside it. Most phones in landscape (over 700 px wide) open full too
+    const FULL_CONTROLS_MIN_WIDTH_PX = 700;
+
+    // The controls the first load opens with: widget.html's own ?controls= if given, so the embed code can choose
+    // (an unknown value goes on to the viewer, which shows its error naming compact and full), else full ones in a
+    // wide frame and compact ones in a narrow one. Checked once: resizing later leaves the controls as they are
+    function initialControlsMode() {
+      const asked = new URLSearchParams(location.search).get('controls');
+      if (asked !== null) return asked;
+      return matchMedia(`(min-width: ${FULL_CONTROLS_MIN_WIDTH_PX}px)`).matches ? 'full' : 'compact';
+    }
+
     let shown = null;
-    // The viewer's ?controls= mode ('compact', its default, or 'full') the frame was last loaded with
-    let controlsMode = 'compact';
+    // The viewer's ?controls= mode the frame was last loaded with: 'compact' (the viewer's default) or 'full'; an
+    // unknown value from widget.html's own ?controls= is passed on unchanged, so that the viewer reports it
+    let controlsMode = initialControlsMode();
+
+    // A dataset's embed URL with a controls mode; compact, the viewer's default, needs no parameter. Every embed URL
+    // has a query already, so the parameter is appended as text
+    function embedUrl(name, mode) {
+      const src = new URL(DATASETS[name], location.href).href;
+      return mode === 'compact' ? src : src + '&controls=' + encodeURIComponent(mode);
+    }
 
     // The controls mode the viewer frame shows now: the viewer's embed bar sets the class compact on its body for
     // compact controls (its button then reads More controls) and removes it for full ones (button reads Fewer
@@ -63,18 +85,17 @@
       return doc.body.classList.contains('compact') ? 'compact' : 'full';
     }
 
-    // Load a dataset into the viewer frame (only when it changes), with the controls the frame shows now, and mark its
-    // button. After the first load, location.replace swaps the frame's page without a history entry; setting src
-    // again would add one, so the host page's Back button would step the frame back to the other dataset
+    // Load a dataset into the viewer frame (only when it changes), with the controls the frame shows now (the first
+    // time, initialControlsMode's), and mark its button. After the first load, location.replace swaps the frame's
+    // page without a history entry; setting src again would add one, so the host page's Back button would step the
+    // frame back to the other dataset
     function show(name) {
       if (name !== shown) {
-        const src = new URL(DATASETS[name], location.href).href;
         if (shown === null) {
-          viewer.src = src;
+          viewer.src = embedUrl(name, controlsMode);
         } else {
           controlsMode = currentControlsMode();
-          // Every embed URL has a query already, so the parameter is appended as text
-          viewer.contentWindow.location.replace(controlsMode === 'full' ? src + '&controls=full' : src);
+          viewer.contentWindow.location.replace(embedUrl(name, controlsMode));
         }
         shown = name;
       }
