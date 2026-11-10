@@ -108,6 +108,23 @@ export function enableDragSelect(container, apply) {
   });
 }
 
+// The 'reverse' toggle of a filter panel and of the legend (pressed: aria-pressed true, its column hides the ticked
+// values or its range instead of showing them, see filters.js); title: its tooltip; onToggle runs on each press. Its
+// state is shown by showReversed
+export function reverseToggle(title, onToggle) {
+  const button = el('button', { className: 'reverse', textContent: 'reverse', title });
+  button.setAttribute('aria-pressed', 'false');
+  button.addEventListener('click', onToggle);
+  return button;
+}
+
+// Show whether a column is reversed on its toggle and on the element holding its rows (class 'reversed': style.css
+// dims and strikes the ticked rows)
+export function showReversed(toggle, rows, reversed) {
+  toggle.setAttribute('aria-pressed', String(reversed));
+  rows.classList.toggle('reversed', reversed);
+}
+
 // Dropdown that sorts a list by name (A-Z) or by number of cells; onChange gets 'name' or 'count'
 export function sortSelect(initial, onChange) {
   const select = el('select', { className: 'sort', title: 'Sort by name or by number of cells' }, [

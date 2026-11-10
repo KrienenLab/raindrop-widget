@@ -2,7 +2,7 @@
 // lists its values with checkboxes, a numeric column's has min and max boxes. All panels combine with AND
 // (filters.js) and belong to the selected view's settings.
 import * as filters from './filters.js';
-import { el, enableDragSelect, sortSelect } from './ui.js';
+import { el, enableDragSelect, reverseToggle, showReversed, sortSelect } from './ui.js';
 
 export class FilterPanels {
   // manifest, dataset: the open dataset (data.js); categories: column titles and rows (categories.js);
@@ -30,7 +30,7 @@ export class FilterPanels {
   }
 
   // A filter on obs column `name`, with its panel: the existing one if the column has one. A filter starts with
-  // nothing ticked and no bounds, so it shows every cell
+  // nothing ticked, no bounds and not reversed, so it shows every cell
   async addFilter(name) {
     if (this.filters.some((f) => f.field.name === name)) return this.filters.find((f) => f.field.name === name);
     const field = this.dataset.fields.get(name);
@@ -42,6 +42,7 @@ export class FilterPanels {
       allowed: null,
       min: null,
       max: null,
+      reversed: false,
       search: '',
       sortBy: 'name',
       // Open groups when the column has a hierarchy
@@ -60,27 +61,36 @@ export class FilterPanels {
     this.refresh();
   }
 
-  // A filter's panel: a header (column title, summary, sort menu for categories, clear and remove buttons), then a
-  // search box and checkbox rows (rows can be set by dragging over them) or the min and max boxes
+  // A filter's panel: a header (column title, summary, sort menu for categories, reverse toggle, clear and remove
+  // buttons), then a search box and checkbox rows (rows can be set by dragging over them) or the min and max boxes.
+  // The panel shows the filter's reverse state from the start, as an unlinked view's copy may be reversed
   buildFilterPanel(filter) {
+    const hidden = filter.kind === 'category' ? 'the ticked values' : 'the cells in the range';
+    filter.reverseToggle = reverseToggle(`Hide ${hidden} instead of showing them`, () => {
+      filter.reversed = !filter.reversed;
+      this.refresh();
+    });
+    // Clear returns the panel to a new one's state: nothing ticked, no bounds, not reversed
     const clear = el('button', { textContent: 'clear', title: 'Show all values' });
     clear.addEventListener('click', () => {
       filter.allowed = null;
       filter.min = null;
       filter.max = null;
+      filter.reversed = false;
       panel.querySelectorAll('input[type=number]').forEach((input) => { input.value = ''; });
       this.refresh();
     });
     const remove = el('button', { textContent: '×', title: 'Remove this filter' });
     remove.addEventListener('click', () => this.removeFilter(filter));
     filter.summary = el('span', { className: 'summary' });
-    const header = el('div', { className: 'filter-header' }, [el('strong', { textContent: this.categories.columnTitle(filter.field.name) }), filter.summary, clear, remove]);
+    const header = el('div', { className: 'filter-header' }, [el('strong', { textContent: this.categories.columnTitle(filter.field.name) }), filter.summary, filter.reverseToggle, clear, remove]);
     const panel = el('div', { className: 'filter' }, [header]);
+    showReversed(filter.reverseToggle, panel, filter.reversed);
     if (filter.kind === 'category') {
       header.insertBefore(sortSelect(filter.sortBy, (by) => {
         filter.sortBy = by;
         this.renderFilterList(filter);
-      }), clear);
+      }), filter.reverseToggle);
     }
 
     if (filter.kind === 'category') {
@@ -121,19 +131,24 @@ export class FilterPanels {
       filter.search, filter.expanded, toggleGroup));
   }
 
-  // Each panel's summary ('all', 'n selected', 'range set') and a categorical panel's rows and counts, for the
-  // selected view
+  // Each panel's reverse state, summary ('all'; 'n selected' or, reversed, 'hiding n of N'; 'range set' or, reversed,
+  // 'hiding range') and a categorical panel's rows and counts, for the selected view
   updateFilterPanels() {
     for (const filter of this.filters) {
+      showReversed(filter.reverseToggle, filter.panel, filter.reversed);
       if (filter.kind === 'category') {
-        // Counts for this filter's values respect every other filter, but not this one
+        // Counts for this filter's values respect every other filter (each as it is, reversed or not), but not this
+        // one: beside a hidden value is the number of its cells this filter hides
+        const nValues = filter.field.categories.length;
         const others = filters.computeKeep(this.selectedView().valid, this.filters, filter);
-        filter.counts = filters.countCategories(filter.values, filter.field.categories.length, others);
+        filter.counts = filters.countCategories(filter.values, nValues, others);
         const nTicked = filter.allowed ? filter.allowed.reduce((a, b) => a + b, 0) : 0;
-        filter.summary.textContent = nTicked ? `${nTicked} selected` : 'all';
+        const ticked = filter.reversed ? `hiding ${nTicked} of ${nValues}` : `${nTicked} selected`;
+        filter.summary.textContent = nTicked ? ticked : 'all';
         this.renderFilterList(filter);
       } else {
-        filter.summary.textContent = filters.isActive(filter) ? 'range set' : 'all';
+        const set = filter.reversed ? 'hiding range' : 'range set';
+        filter.summary.textContent = filters.isActive(filter) ? set : 'all';
       }
     }
   }

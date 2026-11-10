@@ -22,11 +22,6 @@ import { ViewGrid } from './views.js';
 const NO_POSITION_STATE = 0;
 const CONTEXT_STATE = 1;
 const SHOWN_STATE = 2;
-// The note under Reverse (index.html) while it is on, with a filter set and without one, and the cell count's mark
-// while it takes effect (the count is also in a compact embed's bar, where the note is hidden)
-const REVERSED_NOTE = 'Showing everything except the selection';
-const NO_EFFECT_NOTE = 'No filter set: Reverse has no effect';
-const REVERSED_COUNT_MARK = ' (all except the selection)';
 // The hover label sits this many CSS px from the pointer, right of and below it (left of or above it in the tile's
 // right or bottom half, so it stays inside the tile)
 const HOVER_LABEL_OFFSET_PX = 12;
@@ -215,8 +210,6 @@ class App {
       contextOpacity: Number(document.getElementById('context-opacity').value),
       contextColors: document.getElementById('context-colors').checked,
       showAxes: document.getElementById('show-axes').checked,
-      // Reverse: show the cells the filters leave out (shownCells)
-      reverseFilters: document.getElementById('reverse-filters').checked,
     };
 
     const select = document.getElementById('embedding');
@@ -279,12 +272,6 @@ class App {
     numberBox('context-point-size', 'contextPointSize', sizeToSlider, fromLog2);
     numberBox('shown-opacity', 'shownOpacity', (percentValue) => percentValue / 100, (fraction) => fraction);
     numberBox('context-opacity', 'contextOpacity', (percentValue) => percentValue / 100, (fraction) => fraction);
-    // Reverse changes which cells are shown, so it refreshes the views rather than only applying settings
-    const reverse = document.getElementById('reverse-filters');
-    reverse.addEventListener('change', () => {
-      this.settings.reverseFilters = reverse.checked;
-      this.refresh();
-    });
   }
 
   // Show a view's display settings and turn axis in it
@@ -314,7 +301,6 @@ class App {
     document.getElementById('context-opacity').value = settings.contextOpacity;
     document.getElementById('context-colors').checked = settings.contextColors;
     document.getElementById('show-axes').checked = settings.showAxes;
-    document.getElementById('reverse-filters').checked = settings.reverseFilters;
     document.getElementById('filters').replaceChildren(...settings.filters.map((f) => f.panel));
     this.showBoxes();
     this.turning.showTurnAxis();
@@ -446,34 +432,19 @@ class App {
   }
 
   // After any filter, embedding or view change: recompute which cells pass in each view (cells without a
-  // position differ between embeddings), then update the points, and the count, Reverse note, filter panels,
-  // add-filter menu and legend of the selected view
+  // position differ between embeddings), then update the points, and the count, filter panels, add-filter menu and
+  // legend of the selected view
   refresh() {
     const ready = this.views.filter((view) => view.valid);
     if (!this.selected?.valid) return;
     for (const view of ready) {
-      view.keep = this.shownCells(view);
+      view.keep = filters.computeKeep(view.valid, view.settings.filters);
       this.updatePoints(view);
     }
     this.updateCount();
-    this.showReverseNote();
     this.panels.updateFilterPanels();
     this.panels.updateAddFilterOptions();
     this.legend.renderLegend();
-  }
-
-  // Mask of the cells a view shows: those passing its filters, or with Reverse the others with a position. Reverse
-  // without a filter set would show nothing, so it does nothing then; a set filter that excludes nothing (every value
-  // ticked) still counts, and reversed shows no cell
-  shownCells(view) {
-    const { settings } = view;
-    const keep = filters.computeKeep(view.valid, settings.filters);
-    return this.isReversed(settings) ? filters.reverseKeep(view.valid, keep) : keep;
-  }
-
-  // Whether Reverse takes effect: on, with a filter set
-  isReversed(settings) {
-    return settings.reverseFilters && settings.filters.some(filters.isActive);
   }
 
   // Shown cells in color, filtered-out cells as context, cells without a position not at all
@@ -483,21 +454,11 @@ class App {
     view.scene.setState(state);
   }
 
-  // The selected view's count: cells shown, of those with a position in its embedding, marked while Reverse takes
-  // effect
+  // The selected view's count: cells passing its filters, of those with a position in its embedding
   updateCount() {
     const nShown = filters.countKept(this.selected.keep);
     const nValid = filters.countKept(this.selected.valid);
-    const mark = this.isReversed(this.settings) ? REVERSED_COUNT_MARK : '';
-    document.getElementById('count').textContent = `${formatCount(nShown)} of ${formatCount(nValid)} cells shown${mark}`;
-  }
-
-  // The note under Reverse while it is on for the selected view: what is shown, or that it has no effect yet. Called
-  // from refresh, as setting or clearing a filter changes which text applies
-  showReverseNote() {
-    const note = document.getElementById('reverse-note');
-    note.hidden = !this.settings.reverseFilters;
-    note.textContent = this.isReversed(this.settings) ? REVERSED_NOTE : NO_EFFECT_NOTE;
+    document.getElementById('count').textContent = `${formatCount(nShown)} of ${formatCount(nValid)} cells shown`;
   }
 
   // Show the hover label of a view for `cell` beside `pointer` (tile CSS px), hiding every other view's; cell -1, or a

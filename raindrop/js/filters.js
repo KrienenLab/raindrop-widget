@@ -1,11 +1,12 @@
 // Cell filtering. Plain functions over typed arrays, so they run in the browser and in node tests.
 //
 // A filter is one of
-//   {field, kind: 'category', values: integer codes per cell, allowed: Uint8Array per category, or null}
-//   {field, kind: 'range', values: Float32Array per cell, min: number or null, max: number or null}
-// A category filter with nothing ticked (allowed === null) or a range with no bounds restricts nothing.
-// All active filters combine with AND. Keep masks are Uint8Arrays with 1 (kept) or 0 per cell.
-// Reversed, the cells shown are those the filters do not keep (reverseKeep).
+//   {field, kind: 'category', values: integer codes per cell, allowed: Uint8Array per category, or null, reversed}
+//   {field, kind: 'range', values: Float32Array per cell, min: number or null, max: number or null, reversed}
+// A reversed filter (reversed true) keeps the cells the same filter unreversed drops: the values not ticked, or those
+// outside the range. A category filter with nothing ticked (allowed === null) or a range with no bounds restricts
+// nothing, reversed or not. All active filters combine with AND. Keep masks are Uint8Arrays with 1 (kept) or 0 per
+// cell.
 
 // Whether the filter restricts anything (see above)
 export function isActive(filter) {
@@ -14,20 +15,22 @@ export function isActive(filter) {
 }
 
 // Clear keep[i] for every cell that fails the filter, in place. A range is closed, min <= value <= max,
-// a missing bound being open-ended
+// a missing bound being open-ended. A cell fails when its test (value ticked, or inside the range) equals `reversed`:
+// unreversed, cells not ticked (outside) fail; reversed, ticked (inside) cells fail
 export function applyFilter(filter, keep) {
   const values = filter.values;
+  const reversed = Boolean(filter.reversed);
   if (filter.kind === 'category') {
     const allowed = filter.allowed;
     for (let i = 0; i < keep.length; i++) {
-      if (keep[i] && !allowed[values[i]]) keep[i] = 0;
+      if (keep[i] && Boolean(allowed[values[i]]) === reversed) keep[i] = 0;
     }
   } else {
     const lo = filter.min ?? -Infinity;
     const hi = filter.max ?? Infinity;
-    // Written as !(inside) so NaN values fail an active range
+    // NaN is never inside, so it fails an active range and passes it reversed
     for (let i = 0; i < keep.length; i++) {
-      if (keep[i] && !(values[i] >= lo && values[i] <= hi)) keep[i] = 0;
+      if (keep[i] && (values[i] >= lo && values[i] <= hi) === reversed) keep[i] = 0;
     }
   }
 }
@@ -40,14 +43,6 @@ export function computeKeep(base, filters, skip = null) {
     if (filter !== skip && isActive(filter)) applyFilter(filter, keep);
   }
   return keep;
-}
-
-// New mask of the cells set in `base` but not in `keep` (the complement of keep within base, so cells outside base
-// stay 0); neither input is changed
-export function reverseKeep(base, keep) {
-  const reversed = new Uint8Array(base.length);
-  for (let i = 0; i < base.length; i++) reversed[i] = base[i] && !keep[i] ? 1 : 0;
-  return reversed;
 }
 
 // Number of kept cells in each category (codes must be below nCategories)

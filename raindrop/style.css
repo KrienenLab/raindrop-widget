@@ -79,8 +79,6 @@ button:hover { border-color: var(--accent); }
 .turn-about[hidden] { display: none; }
 /* Short usage hints, e.g. what Shift does to a drag */
 .hint { font-size: 11px; color: var(--muted); margin: 2px 0 4px; }
-/* The Reverse note stands out, so ticked values are not read as the cells shown */
-#reverse-note { color: var(--accent); font-weight: 600; }
 #rotation { width: 100%; border-collapse: collapse; margin: 4px 0; }
 #rotation th { text-align: left; font-weight: 600; width: 28px; }
 #rotation td { padding: 1px 2px; }
@@ -152,9 +150,16 @@ button:hover { border-color: var(--accent); }
   border-left: 1px solid var(--border);
   background: var(--panel);
 }
-.legend-title { display: flex; gap: 6px; align-items: center; font-weight: 600; margin-bottom: 4px; }
-.legend-title span { flex: 1; }
-.legend-title button.clear { font-size: 11px; padding: 0 6px; font-weight: normal; }
+/* The buttons wrap below a long name, and in a narrow legend (phones), rather than run out of it */
+.legend-title { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-weight: 600; margin-bottom: 4px; }
+.legend-title span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.legend-title button.clear, .legend-title button.reverse { font-size: 11px; padding: 0 6px; font-weight: normal; }
+/* A pressed reverse toggle (filter panels and legend): its column hides the ticked values */
+button.reverse[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* In a reversed column the ticked rows are the hidden values: dimmed and struck through. :has follows the boxes as
+   they change, during a drag too; a partly ticked group (indeterminate, not checked) is not struck */
+.reversed .row:has(> input:checked) { opacity: 0.5; }
+.reversed .row:has(> input:checked) .name { text-decoration: line-through; }
 select.sort { width: auto; font-size: 11px; padding: 0 2px; color: var(--muted); }
 .colorbar { height: 12px; border-radius: 3px; }
 .colorbar-labels { display: flex; justify-content: space-between; color: var(--muted); }
@@ -244,6 +249,9 @@ body.compact #legend { width: clamp(220px, 22vw, 360px); }
   /* The buttons a visitor taps most (the embed bar's, Reset, the side buttons, the angles' 0) tall enough for a
      finger; the small ones inside rows and tiles keep their size */
   #embed-bar button, #reset-rotation, #faces button, #rotation button.reset { min-height: 36px; }
+  /* The reverse toggles of the filter panels and the legend, finger-sized too (the legend's selector is repeated, as
+     its desktop padding rule is more specific than button.reverse) */
+  button.reverse, .legend-title button.reverse { min-height: 36px; padding: 0 10px; }
 }
 /* Touch screens: a quick second tap on a control is a tap, not the browser's double-tap zoom; iPhones in landscape
    keep the page's text sizes */
