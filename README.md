@@ -24,7 +24,7 @@
 
 ```html
 <iframe src="https://krienenlab.github.io/raindrop-widget/widget.html"
-        style="width:100%; height:90vh; border:0" allowfullscreen loading="lazy"></iframe>
+        style="width:100%; height:80vh; border:0" allowfullscreen loading="lazy"></iframe>
 ```
 
 The Mouse | Marmoset buttons switch datasets and record the choice in the address (`widget.html#mouse`,
