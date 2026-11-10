@@ -9,37 +9,50 @@ export const EMBED_CONTROLS = ['compact', 'full'];
 
 // How long the "Ctrl + scroll to zoom" hint stays after the last plain scroll, in milliseconds
 const ZOOM_HINT_DURATION_MS = 1500;
-// Controls that compact embeds move into the bar (borrowControls); each must exist in index.html before main runs
-const BORROWED_CONTROL_IDS = ['count', 'color-field', 'gene-box', 'reset-rotation'];
+// Controls that compact embeds move into the bar (borrowControls): the cell count, color menu and gene box into its
+// .bar-controls, and the reset button to the front of its .bar-buttons rather than after the menus, so that a narrow
+// screen wraps it onto one row with the controls toggle and Full screen. Each must exist in index.html before main
+// runs
+const BORROWED_CONTROL_IDS = ['count', 'color-field', 'gene-box'];
+const BORROWED_BUTTON_ID = 'reset-rotation';
 
 // Show the embed bar, opening with compact controls if controlsMode is 'compact', and let plain scrolls over the view
 // scroll the page
 export function showEmbedBar(controlsMode) {
   const bar = document.getElementById('embed-bar');
-  const setCompact = borrowControls(bar);
-  bar.append(controlsToggle(setCompact, controlsMode === 'compact'));
+  // Two groups that each wrap on their own: the borrowed menus, then the bar's buttons
+  const controls = el('span', { className: 'bar-controls' });
+  const buttons = el('span', { className: 'bar-buttons' });
+  bar.append(controls, buttons);
+  const setCompact = borrowControls(controls, buttons);
+  buttons.append(controlsToggle(setCompact, controlsMode === 'compact'));
   // Browsers refuse full screen in an iframe without allowfullscreen; the button is then left out
-  if (document.fullscreenEnabled) bar.append(fullScreenToggle());
+  if (document.fullscreenEnabled) buttons.append(fullScreenToggle());
   bar.hidden = false;
   passPlainScrollsToPage();
 }
 
 // Marks the places of the cell count, color menu, gene box and reset button in the side panel and returns a function
 // that switches between compact controls (true: side panel hidden, the controls moved into the bar, where their
-// listeners still work) and the full side panel with the controls back in place (false)
-function borrowControls(bar) {
-  const homes = BORROWED_CONTROL_IDS.map((id) => {
+// listeners still work: the count, color menu and gene box into controls, the reset button to the front of buttons)
+// and the full side panel with the controls back in place (false)
+function borrowControls(controls, buttons) {
+  const homes = [...BORROWED_CONTROL_IDS, BORROWED_BUTTON_ID].map((id) => {
     const control = document.getElementById(id);
     const home = document.createComment(id);
     control.before(home);
     return [control, home];
   });
-  const controls = el('span', { className: 'bar-controls' });
-  bar.append(controls);
+  const barControls = BORROWED_CONTROL_IDS.map((id) => document.getElementById(id));
+  const resetButton = document.getElementById(BORROWED_BUTTON_ID);
   return (isCompact) => {
     document.body.classList.toggle('compact', isCompact);
-    if (isCompact) controls.append(...homes.map(([control]) => control));
-    else for (const [control, home] of homes) home.after(control);
+    if (isCompact) {
+      controls.append(...barControls);
+      buttons.prepend(resetButton);
+    } else {
+      for (const [control, home] of homes) home.after(control);
+    }
   };
 }
 
