@@ -20,6 +20,16 @@ export function svg(tag, attributes = {}, children = []) {
   return element;
 }
 
+// Enter in a number box (or Android's Done key, which sends Enter) also leaves it, so a phone's on-screen keyboard
+// closes and the picture shows. The box's own 'change' handler still applies the value, once: this runs before
+// Enter's default action, so leaving the box fires 'change' (if the value changed) and Enter then finds nothing left
+// to commit
+export function blurOnEnter(input) {
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') input.blur();
+  });
+}
+
 // A count with thousands separators, the same in every locale (e.g. 12,345)
 export function formatCount(n) {
   return n.toLocaleString('en-US');
@@ -48,19 +58,27 @@ export function checkRow(codes, name, count, rgb, state) {
 // a row gives it the opposite of its state, dragging over other rows gives them the same state, and on release
 // apply(codes, value) runs once. A press without dragging thus toggles one row. Mouse clicks are taken over
 // (the label would toggle the box again); keyboard toggles still reach apply through the change event.
-// A group's open/close button is left to its own click handler
+// Touches are left to the browser: a finger swiping over the rows scrolls the list, and a tap toggles its row as a
+// click on the label does, reaching apply through the change event. A drag the browser cancels (pointercancel, e.g.
+// a pen that starts scrolling) applies nothing. A group's open/close button is left to its own click handler
 export function enableDragSelect(container, apply) {
-  // The drag in progress: the state given to the rows pressed or passed over, and their codes
+  // The drag in progress: the state given to the rows pressed or passed over, their codes, and each marked box's
+  // state before (for a cancelled drag); and the pointer type of the last press in the container, for the click
+  // that follows it ('touch': let the label toggle its box)
   let drag = null;
+  let pressType = null;
   const mark = (row) => {
-    row.querySelector('input').checked = drag.value;
+    const box = row.querySelector('input');
+    if (!drag.before.has(box)) drag.before.set(box, box.checked);
+    box.checked = drag.value;
     for (const code of rowCodes(row)) drag.codes.add(code);
   };
   container.addEventListener('pointerdown', (event) => {
+    pressType = event.pointerType;
     const row = event.target.closest('.row');
-    if (!row || event.button !== 0 || event.target.closest('.expander')) return;
+    if (!row || event.button !== 0 || event.target.closest('.expander') || event.pointerType === 'touch') return;
     event.preventDefault();
-    drag = { value: !row.querySelector('input').checked, codes: new Set() };
+    drag = { value: !row.querySelector('input').checked, codes: new Set(), before: new Map() };
     mark(row);
   });
   container.addEventListener('pointerover', (event) => {
@@ -74,14 +92,37 @@ export function enableDragSelect(container, apply) {
     drag = null;
     apply([...codes], value);
   });
-  // A mouse click (detail > 0) was handled on pointerdown; a keyboard click (detail 0) toggles as usual
+  // A cancelled drag applies nothing, and the boxes it marked go back to their states before it
+  window.addEventListener('pointercancel', () => {
+    if (!drag) return;
+    for (const [box, checked] of drag.before) box.checked = checked;
+    drag = null;
+  });
+  // A mouse or pen click (detail > 0) was handled on pointerdown; a keyboard click (detail 0) and a tap toggle as usual
   container.addEventListener('click', (event) => {
-    if (event.detail > 0 && event.target.closest('.row')) event.preventDefault();
+    if (event.detail > 0 && pressType !== 'touch' && event.target.closest('.row')) event.preventDefault();
   });
   container.addEventListener('change', (event) => {
     const row = event.target.closest('.row');
     if (row) apply(rowCodes(row), event.target.checked);
   });
+}
+
+// The 'reverse' toggle of a filter panel and of the legend (pressed: aria-pressed true, its column hides the ticked
+// values or its range instead of showing them, see filters.js); title: its tooltip; onToggle runs on each press. Its
+// state is shown by showReversed
+export function reverseToggle(title, onToggle) {
+  const button = el('button', { className: 'reverse', textContent: 'reverse', title });
+  button.setAttribute('aria-pressed', 'false');
+  button.addEventListener('click', onToggle);
+  return button;
+}
+
+// Show whether a column is reversed on its toggle and on the element holding its rows (class 'reversed': style.css
+// dims and strikes the ticked rows)
+export function showReversed(toggle, rows, reversed) {
+  toggle.setAttribute('aria-pressed', String(reversed));
+  rows.classList.toggle('reversed', reversed);
 }
 
 // Dropdown that sorts a list by name (A-Z) or by number of cells; onChange gets 'name' or 'count'

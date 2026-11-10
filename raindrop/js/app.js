@@ -8,11 +8,13 @@ import { clampDegrees, faceRotation, openingTurnAxis } from './rotation.js';
 import { buildAxisLabels, buildAxisWidget, updateAxisLabels, updateAxisWidget, WIDGET_HALF_SIZE } from './axes.js';
 import { Categories } from './categories.js';
 import { Coloring } from './coloring.js';
+import { toHex } from './colors.js';
 import { EMBED_CONTROLS, showEmbedBar } from './embed.js';
 import { Legend } from './legend.js';
+import { cellValueText } from './names.js';
 import { FilterPanels } from './panels.js';
 import { Turning } from './turning.js';
-import { el, formatCount, svg } from './ui.js';
+import { blurOnEnter, el, formatCount, svg } from './ui.js';
 import { ViewGrid } from './views.js';
 
 // Per-cell states for PointCloudView.setState (see scene.js): not drawn (no position in this embedding), drawn
@@ -20,15 +22,23 @@ import { ViewGrid } from './views.js';
 const NO_POSITION_STATE = 0;
 const CONTEXT_STATE = 1;
 const SHOWN_STATE = 2;
-// The note under Reverse (index.html) while it is on, with a filter set and without one, and the cell count's mark
-// while it takes effect (the count is also in a compact embed's bar, where the note is hidden)
-const REVERSED_NOTE = 'Showing everything except the selection';
-const NO_EFFECT_NOTE = 'No filter set: Reverse has no effect';
-const REVERSED_COUNT_MARK = ' (all except the selection)';
+// The hover label sits this many CSS px from the pointer, right of and below it (left of or above it in the tile's
+// right or bottom half, so it stays inside the tile)
+const HOVER_LABEL_OFFSET_PX = 12;
 
-// An opacity (a fraction) as the readouts show it, in whole percent
+// The controls each key of the manifest's defaults.style (convert.py --start-style) sets: sizes (multiples of the
+// default size) on the log2 size sliders, opacities (fractions) on the opacity sliders, keep_colors on the switch
+const START_STYLE_CONTROLS = {
+  shown_size: { id: 'point-size', log2: true },
+  shown_opacity: { id: 'shown-opacity', log2: false },
+  filtered_size: { id: 'context-point-size', log2: true },
+  filtered_opacity: { id: 'context-opacity', log2: false },
+  keep_colors: { id: 'context-colors' },
+};
+
+// An opacity (a fraction) as its number box shows it, in whole percent
 function percent(fraction) {
-  return `${Math.round(fraction * 100)}%`;
+  return Math.round(fraction * 100);
 }
 
 class App {
@@ -103,19 +113,72 @@ class App {
     const { manifest } = this;
     document.title = `${manifest.name} - Raindrop`;
     document.getElementById('title').textContent = manifest.name;
+    // The dataset's starting style goes into the controls before buildViewControls reads the settings from them
+    this.setStartStyle();
     this.buildViewControls();
     this.coloring.buildColorControls();
     this.legend.buildLegend();
     this.panels.listenForAddFilter();
+    // A press anywhere (a drag starting, or a tap elsewhere, including the side panel) hides the hover labels; a tap
+    // on a cell shows its label again on release. Capture, so a handler that stops the event cannot keep it
+    window.addEventListener('pointerdown', () => this.hideHoverLabels(), { capture: true });
 
     const view = this.createView();
     this.select(view);
     await this.setEmbedding(view, manifest.defaults.embedding);
-    // Panels for convert.py --filters
+    // Panels for convert.py --filters, with the values of --select ticked
     for (const name of manifest.defaults.filters) await this.panels.addFilter(name);
+    await this.selectStartValues();
     // Color by convert.py --color, else the first categorical column
     const firstCategory = manifest.fields.find((f) => f.kind === 'category');
     await this.coloring.setColor(view, { kind: 'field', name: manifest.defaults.color ?? firstCategory?.name });
+  }
+
+  // Tick the values of convert.py --select (the manifest's defaults.selected, absent in older manifests) in their
+  // columns' filter panels, then refresh once. The filters belong to the linked views' shared settings, so every
+  // linked view, and each view added later, starts with them. A column without a --filters panel gets one here. A
+  // column that is not categorical, or a value it lacks, stops the viewer with a message (main shows it in the status
+  // line)
+  async selectStartValues() {
+    const selected = Object.entries(this.manifest.defaults.selected ?? {});
+    for (const [name, values] of selected) {
+      const filter = await this.panels.addFilter(name);
+      if (filter.kind !== 'category') throw new Error(`The dataset ticks values of ${name}, which is numeric and has no values to tick`);
+      const codes = values.map((value) => {
+        const code = filter.field.categories.indexOf(value);
+        if (code < 0) throw new Error(`The dataset ticks ${value}, which is not a value of ${name}`);
+        return code;
+      });
+      filters.setCategories(filter, filter.field.categories.length, codes, true);
+    }
+    if (selected.length) this.refresh();
+  }
+
+  // Set the Shown / Filtered out controls to convert.py --start-style (the manifest's defaults.style; keys left out,
+  // or an older manifest without it, keep index.html's starting values), before buildViewControls reads the settings
+  // from them (init). A range input takes its nearest step (0.1 in log2 of the size, 0.01 in opacity), and the
+  // settings take the slider's value. A key the viewer does not know, or a value that is not a number in its slider's
+  // range (or a boolean for keep_colors), stops the viewer with a message naming the valid keys or values
+  setStartStyle() {
+    for (const [key, value] of Object.entries(this.manifest.defaults.style ?? {})) {
+      const control = START_STYLE_CONTROLS[key];
+      if (!control) throw new Error(`Unknown starting style ${key} in the dataset; the keys are ${Object.keys(START_STYLE_CONTROLS).join(', ')}`);
+      const input = document.getElementById(control.id);
+      if (input.type === 'checkbox') {
+        if (typeof value !== 'boolean') throw new Error(`The dataset's starting ${key} must be true or false, not ${value}`);
+        input.checked = value;
+        continue;
+      }
+      if (typeof value !== 'number') throw new Error(`The dataset's starting ${key} must be a number, not ${JSON.stringify(value)}`);
+      const sliderValue = control.log2 ? Math.log2(value) : value;
+      const [min, max] = [Number(input.min), Number(input.max)];
+      // Written as !(inside) so that NaN fails too; the range is given in the manifest's units
+      if (!(sliderValue >= min && sliderValue <= max)) {
+        const range = control.log2 ? `${2 ** min} to ${2 ** max}` : `${min} to ${max}`;
+        throw new Error(`The dataset's starting ${key} ${value} is outside ${range}`);
+      }
+      input.value = sliderValue;
+    }
   }
 
   // The selected view's settings (the linked views' shared settings before any view exists)
@@ -134,7 +197,7 @@ class App {
   buildViewControls() {
     this.grid.buildViewCount();
     // Settings shared by linked views (filters, turn axis, point sizes, opacities, filtered-out colors, axes); an
-    // unlinked view has its own copy (views.js). Made here, from the controls' starting values
+    // unlinked view has its own copy (views.js). Made here, from the controls' starting values (the dataset's, if set)
     this.group = {
       filters: [],
       // The axis drags turn about (index into the axes, null: any), from convert.py --locked
@@ -147,8 +210,6 @@ class App {
       contextOpacity: Number(document.getElementById('context-opacity').value),
       contextColors: document.getElementById('context-colors').checked,
       showAxes: document.getElementById('show-axes').checked,
-      // Reverse: show the cells the filters leave out (shownCells)
-      reverseFilters: document.getElementById('reverse-filters').checked,
     };
 
     const select = document.getElementById('embedding');
@@ -157,27 +218,60 @@ class App {
 
     this.turning.buildRotationSliders();
 
-    // Each control changes the selected view's settings, and so every view that shares them
+    // Each control changes the selected view's settings, and so every view that shares them. The size sliders are
+    // log2 of the size, the opacity sliders the opacity itself
+    const fromLog2 = (log2Size) => 2 ** log2Size;
+    const setSetting = (key, value) => {
+      this.settings[key] = value;
+      for (const view of this.viewsWith(this.settings)) this.applySettings(view);
+      this.showBoxes();
+    };
     const control = (id, key, read) => {
       const input = document.getElementById(id);
-      input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', () => {
-        this.settings[key] = read(input);
-        for (const view of this.viewsWith(this.settings)) this.applySettings(view);
-        this.showReadouts();
-      });
+      input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', () => setSetting(key, read(input)));
     };
-    control('point-size', 'pointSize', (input) => 2 ** Number(input.value));
+    control('point-size', 'pointSize', (input) => fromLog2(Number(input.value)));
     control('shown-opacity', 'shownOpacity', (input) => Number(input.value));
-    control('context-point-size', 'contextPointSize', (input) => 2 ** Number(input.value));
+    control('context-point-size', 'contextPointSize', (input) => fromLog2(Number(input.value)));
     control('context-opacity', 'contextOpacity', (input) => Number(input.value));
     control('context-colors', 'contextColors', (input) => input.checked);
     control('show-axes', 'showAxes', (input) => input.checked);
-    // Reverse changes which cells are shown, so it refreshes the views rather than only applying settings
-    const reverse = document.getElementById('reverse-filters');
-    reverse.addEventListener('change', () => {
-      this.settings.reverseFilters = reverse.checked;
-      this.refresh();
-    });
+
+    // The number box beside each size and opacity slider: a typed value applies on Enter or when the box loses focus
+    // ('change', as for the rotation angle boxes; Enter also leaves the box, closing a phone's keyboard), rounded to
+    // the box's step (0.1 px, 1%) so that the box then shows the setting. toSlider maps it to the slider's units and
+    // the result is clamped to the slider's range (out-of-range values take the nearest end); the slider moves to its
+    // nearest step, while the setting takes the exact value, read as the slider's value is. Text that is not a number
+    // (valueAsNumber NaN), or a size typed before the view is framed, changes nothing, and the box shows the current
+    // value again
+    const numberBox = (id, key, toSlider, read) => {
+      const slider = document.getElementById(id);
+      const box = document.getElementById(`${id}-box`);
+      blurOnEnter(box);
+      box.addEventListener('change', () => {
+        const step = Number(box.step);
+        const value = toSlider(Math.round(box.valueAsNumber / step) * step);
+        if (Number.isNaN(value)) {
+          this.showBoxes();
+          return;
+        }
+        const clamped = Math.min(Math.max(value, Number(slider.min)), Number(slider.max));
+        slider.value = clamped;
+        setSetting(key, read(clamped));
+      });
+    };
+    // A size box holds the framed diameter in CSS px, which is proportional to the size, so the slider (log2 of the
+    // size) is log2(px / the diameter of size 1). 0 or negative px give log2(0) = -Infinity, clamped to the smallest
+    // size; NaN before the selected view is framed
+    const sizeToSlider = (diameterPx) => {
+      const scene = this.selected?.scene;
+      if (!scene?.fit) return NaN;
+      return Math.log2(Math.max(diameterPx, 0) / scene.framedDiameter(1));
+    };
+    numberBox('point-size', 'pointSize', sizeToSlider, fromLog2);
+    numberBox('context-point-size', 'contextPointSize', sizeToSlider, fromLog2);
+    numberBox('shown-opacity', 'shownOpacity', (percentValue) => percentValue / 100, (fraction) => fraction);
+    numberBox('context-opacity', 'contextOpacity', (percentValue) => percentValue / 100, (fraction) => fraction);
   }
 
   // Show a view's display settings and turn axis in it
@@ -207,23 +301,23 @@ class App {
     document.getElementById('context-opacity').value = settings.contextOpacity;
     document.getElementById('context-colors').checked = settings.contextColors;
     document.getElementById('show-axes').checked = settings.showAxes;
-    document.getElementById('reverse-filters').checked = settings.reverseFilters;
     document.getElementById('filters').replaceChildren(...settings.filters.map((f) => f.panel));
-    this.showReadouts();
+    this.showBoxes();
     this.turning.showTurnAxis();
   }
 
-  // The side panel's readouts of the selected view's settings: Point size as the point's diameter in CSS px when the
-  // view is framed (empty until its embedding has framed it), the opacities in percent
-  showReadouts() {
+  // The side panel's number boxes show the selected view's settings: Point size as the point's diameter in CSS px
+  // when the view is framed (empty and disabled until its embedding has framed it), the opacities in percent
+  showBoxes() {
     const { settings } = this;
     const scene = this.selected?.scene;
-    const output = (id) => document.querySelector(`output[for="${id}"]`);
-    const px = (size) => (scene?.fit ? `${scene.framedDiameter(size).toFixed(1)} px` : '');
-    output('point-size').textContent = px(settings.pointSize);
-    output('context-point-size').textContent = px(settings.contextPointSize);
-    output('shown-opacity').textContent = percent(settings.shownOpacity);
-    output('context-opacity').textContent = percent(settings.contextOpacity);
+    const box = (id) => document.getElementById(`${id}-box`);
+    for (const [id, size] of [['point-size', settings.pointSize], ['context-point-size', settings.contextPointSize]]) {
+      box(id).disabled = !scene?.fit;
+      box(id).value = scene?.fit ? scene.framedDiameter(size).toFixed(1) : '';
+    }
+    box('shown-opacity').value = percent(settings.shownOpacity);
+    box('context-opacity').value = percent(settings.contextOpacity);
   }
 
   // A view: its tile (an element over the shared canvas that takes its mouse input, holding the axis labels, a
@@ -236,11 +330,13 @@ class App {
     const widgetElement = svg('svg', {
       class: 'axis-widget', viewBox: `${-half} ${-half} ${2 * half} ${2 * half}`, 'aria-label': 'Orientation of the data axes',
     });
-    const tile = el('div', { className: 'tile' }, [axisLabelsElement, tileLegend, widgetElement]);
+    // The hover label: the pointed-at cell's color swatch and value (showHoverLabel)
+    const hoverLabel = el('div', { className: 'hover-label', hidden: true }, [el('span', { className: 'swatch' }), el('span')]);
+    const tile = el('div', { className: 'tile' }, [axisLabelsElement, tileLegend, widgetElement, hoverLabel]);
     document.getElementById('tiles').append(tile);
     const linkButton = this.grid.buildLinkButton(tile);
 
-    const view = { tile, axisLabelsElement, tileLegend, widgetElement, linkButton, color: null, linked: true, settings: this.group };
+    const view = { tile, axisLabelsElement, tileLegend, widgetElement, hoverLabel, linkButton, color: null, linked: true, settings: this.group };
     linkButton.addEventListener('click', () => this.grid.toggleLink(view));
     view.scene = new PointCloudView(tile, this.canvas);
     view.widgetAxes = buildAxisWidget(widgetElement);
@@ -250,13 +346,14 @@ class App {
     view.scene.onCameraChange = () => this.grid.syncFrom(view);
     // The framed point size follows the tile's size
     view.scene.onResize = () => {
-      if (view === this.selected) this.showReadouts();
+      if (view === this.selected) this.showBoxes();
     };
     // The axis widget and labels follow every drawn frame (turns, zoom, pan, resize)
     view.scene.onRender = () => {
       updateAxisWidget(view);
       updateAxisLabels(view, this.manifest);
     };
+    view.scene.onHover = (cell, pointer) => this.showHoverLabel(view, cell, pointer);
     tile.addEventListener('pointerdown', () => this.select(view));
     this.views.push(view);
     this.grid.layoutViews();
@@ -329,40 +426,25 @@ class App {
     }
     this.showFace(view, axis, side);
     // The framed point size depends on the embedding's extent and framing
-    if (view === this.selected) this.showReadouts();
+    if (view === this.selected) this.showBoxes();
     if (view.color) await this.coloring.setColor(view, view.color);
     this.refresh();
   }
 
   // After any filter, embedding or view change: recompute which cells pass in each view (cells without a
-  // position differ between embeddings), then update the points, and the count, Reverse note, filter panels,
-  // add-filter menu and legend of the selected view
+  // position differ between embeddings), then update the points, and the count, filter panels, add-filter menu and
+  // legend of the selected view
   refresh() {
     const ready = this.views.filter((view) => view.valid);
     if (!this.selected?.valid) return;
     for (const view of ready) {
-      view.keep = this.shownCells(view);
+      view.keep = filters.computeKeep(view.valid, view.settings.filters);
       this.updatePoints(view);
     }
     this.updateCount();
-    this.showReverseNote();
     this.panels.updateFilterPanels();
     this.panels.updateAddFilterOptions();
     this.legend.renderLegend();
-  }
-
-  // Mask of the cells a view shows: those passing its filters, or with Reverse the others with a position. Reverse
-  // without a filter set would show nothing, so it does nothing then; a set filter that excludes nothing (every value
-  // ticked) still counts, and reversed shows no cell
-  shownCells(view) {
-    const { settings } = view;
-    const keep = filters.computeKeep(view.valid, settings.filters);
-    return this.isReversed(settings) ? filters.reverseKeep(view.valid, keep) : keep;
-  }
-
-  // Whether Reverse takes effect: on, with a filter set
-  isReversed(settings) {
-    return settings.reverseFilters && settings.filters.some(filters.isActive);
   }
 
   // Shown cells in color, filtered-out cells as context, cells without a position not at all
@@ -372,21 +454,39 @@ class App {
     view.scene.setState(state);
   }
 
-  // The selected view's count: cells shown, of those with a position in its embedding, marked while Reverse takes
-  // effect
+  // The selected view's count: cells passing its filters, of those with a position in its embedding
   updateCount() {
     const nShown = filters.countKept(this.selected.keep);
     const nValid = filters.countKept(this.selected.valid);
-    const mark = this.isReversed(this.settings) ? REVERSED_COUNT_MARK : '';
-    document.getElementById('count').textContent = `${formatCount(nShown)} of ${formatCount(nValid)} cells shown${mark}`;
+    document.getElementById('count').textContent = `${formatCount(nShown)} of ${formatCount(nValid)} cells shown`;
   }
 
-  // The note under Reverse while it is on for the selected view: what is shown, or that it has no effect yet. Called
-  // from refresh, as setting or clearing a filter changes which text applies
-  showReverseNote() {
-    const note = document.getElementById('reverse-note');
-    note.hidden = !this.settings.reverseFilters;
-    note.textContent = this.isReversed(this.settings) ? REVERSED_NOTE : NO_EFFECT_NOTE;
+  // Show the hover label of a view for `cell` beside `pointer` (tile CSS px), hiding every other view's; cell -1, or a
+  // view not colored yet, hides only this view's (another view may show the label now). The text is the cell's value
+  // for what the view's colors show (view.cellValues, see Coloring.setColor), the swatch the cell's color
+  showHoverLabel(view, cell, pointer) {
+    if (cell < 0 || !view.cellValues) {
+      view.hoverLabel.hidden = true;
+      return;
+    }
+    this.hideHoverLabels();
+    const { color, values } = view.cellValues;
+    const field = color.kind === 'field' ? this.dataset.fields.get(color.name) : null;
+    const [swatch, text] = view.hoverLabel.children;
+    swatch.style.background = toHex(view.scene.cellColor(cell));
+    text.textContent = cellValueText(color, field, values[cell], this.manifest.gene_sources);
+    // At the pointer, then shifted by the offset, or by the label's own size plus the offset to the other side
+    const [x, y] = pointer;
+    const { clientWidth: width, clientHeight: height } = view.tile;
+    const shift = (isFarHalf) => (isFarHalf ? `calc(-100% - ${HOVER_LABEL_OFFSET_PX}px)` : `${HOVER_LABEL_OFFSET_PX}px`);
+    view.hoverLabel.style.left = `${x}px`;
+    view.hoverLabel.style.top = `${y}px`;
+    view.hoverLabel.style.transform = `translate(${shift(x > width / 2)}, ${shift(y > height / 2)})`;
+    view.hoverLabel.hidden = false;
+  }
+
+  hideHoverLabels() {
+    for (const view of this.views) view.hoverLabel.hidden = true;
   }
 
   setStatus(message) {

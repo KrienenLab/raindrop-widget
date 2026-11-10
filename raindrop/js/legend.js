@@ -1,9 +1,10 @@
 // The legend panel right of the plots: what the selected view is colored by, as checkbox rows of a categorical
-// column's values (ticking them sets that column's filter) or as a color bar for numbers and genes.
+// column's values (ticking them, or its reverse toggle, sets that column's filter) or as a color bar for numbers and
+// genes.
 import * as filters from './filters.js';
 import { COLORMAP_CSS } from './colors.js';
 import { colorLabel } from './names.js';
-import { el, enableDragSelect, sortSelect } from './ui.js';
+import { el, enableDragSelect, reverseToggle, showReversed, sortSelect } from './ui.js';
 
 export class Legend {
   // manifest, dataset: the open dataset (data.js); categories: the rows of categorical columns (categories.js);
@@ -37,17 +38,18 @@ export class Legend {
       this.legendSortBy = by;
       this.renderLegend();
     });
-    // Clear unticks every value of the colored column, like a filter panel's clear
+    // Reverse and clear act on the colored column's filter, as that filter panel's own buttons do
+    this.legendReverse = reverseToggle('Hide the ticked values instead of showing them', () => this.reverseFromLegend());
     this.legendClear = el('button', { className: 'clear', textContent: 'clear', title: 'Show all values' });
     this.legendClear.addEventListener('click', () => this.clearFromLegend());
     this.legendBody = el('div');
     enableDragSelect(this.legendBody, (codes, value) => this.setFromLegend(codes, value));
     const legend = document.getElementById('legend');
-    legend.replaceChildren(el('div', { className: 'legend-title' }, [this.legendLabel, this.legendSortSelect, this.legendClear]), this.legendBody);
+    legend.replaceChildren(el('div', { className: 'legend-title' }, [this.legendLabel, this.legendSortSelect, this.legendReverse, this.legendClear]), this.legendBody);
   }
 
-  // Legend of the selected view: every category of its colored column with a checkbox, or a color bar for
-  // numbers and genes
+  // Legend of the selected view: every category of its colored column with a checkbox (and its filter's reverse
+  // state on the toggle and the rows), or a color bar for numbers and genes
   async renderLegend() {
     const view = this.selectedView();
     if (!view?.color || !view.keep) return;
@@ -60,7 +62,10 @@ export class Legend {
 
     this.legendLabel.textContent = colorLabel(view.color, this.manifest.gene_sources);
     this.legendSortSelect.hidden = !isCategory;
+    this.legendReverse.hidden = !isCategory;
     this.legendClear.hidden = !isCategory;
+    const own = isCategory ? this.filters.find((f) => f.field.name === field.name) : null;
+    showReversed(this.legendReverse, this.legendBody, Boolean(own?.reversed));
     this.legendBody.replaceChildren(...body);
   }
 
@@ -74,8 +79,9 @@ export class Legend {
   }
 
   // Every value in name or count order, ticked when selected in this column's filter, so several can be
-  // picked here. Counts respect the other filters but not this column's own, so ticking one value does not
-  // hide or zero the rest; values without cells under the other filters are greyed, not dropped
+  // picked here. Counts respect the other filters (each as it is, reversed or not) but not this column's own, so
+  // ticking or reversing does not hide or zero the rest, and the counts are the column's filter panel's; values without
+  // cells under the other filters are greyed, not dropped
   async categoryLegend(field) {
     const codes = await this.dataset.fieldValues(field.name);
     const own = this.filters.find((f) => f.field.name === field.name) ?? null;
@@ -90,12 +96,27 @@ export class Legend {
     return this.categories.categoryRows(field, counts, own?.allowed ?? null, this.legendSortBy, '', expanded, toggleGroup);
   }
 
-  // Clear: the colored column's filter (if it has one) shows every value again
+  // Clear: the colored column's filter (if it has one) shows every value again and is no longer reversed
   clearFromLegend() {
     const filter = this.filters.find((f) => f.field.name === this.selectedView().color.name);
     if (!filter) return;
     filter.allowed = null;
+    filter.reversed = false;
     this.refresh();
+  }
+
+  // Reverse the selected view's colored column's filter, adding it (nothing ticked, so no effect yet) if needed. The
+  // toggle is disabled while the filter is added (its values load asynchronously), so a quick second press cannot
+  // add the column twice
+  async reverseFromLegend() {
+    this.legendReverse.disabled = true;
+    try {
+      const filter = await this.addFilter(this.selectedView().color.name);
+      filter.reversed = !filter.reversed;
+      this.refresh();
+    } finally {
+      this.legendReverse.disabled = false;
+    }
   }
 
   // Ticking legend entries ticks them in the selected view's colored column's filter, adding it if needed

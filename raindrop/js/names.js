@@ -39,3 +39,18 @@ export function colorLabel(color, sources) {
   const scale = sources.find((s) => s.name === color.source).scale ?? 'log scale';
   return color.source === sources[0].name ? `${color.name} (${scale})` : `${color.name} (${color.source}, ${scale})`;
 }
+
+// Significant digits of a value in the hover label, as the legend's color bar rounds its ends
+const LABEL_DIGITS = 3;
+
+// The hover label's text for one cell's value of what the view is colored by (`color`; `field`, its manifest field,
+// is unused for genes): a category's name for a categorical column (its code's entry, 'NA' included); else the name
+// and the value to LABEL_DIGITS significant digits, in the units the legend shows (genes as stored: counts, or the
+// source's own scale, which is then named, e.g. 'Pcp4 (log2): 3.14'), or 'no value' for NaN. `sources` is the
+// manifest's gene_sources
+export function cellValueText(color, field, value, sources) {
+  if (color.kind === 'field' && field.kind === 'category') return field.categories[value];
+  const scale = color.kind === 'gene' ? sources.find((s) => s.name === color.source).scale : null;
+  const name = scale ? `${color.name} (${scale})` : color.name;
+  return `${name}: ${Number.isFinite(value) ? Number(value.toPrecision(LABEL_DIGITS)) : 'no value'}`;
+}

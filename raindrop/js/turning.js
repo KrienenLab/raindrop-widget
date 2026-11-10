@@ -12,7 +12,7 @@
 // angles it shows stay right.
 import { clampDegrees, MAX_DEGREES } from './rotation.js';
 import { axisLabels, capitalize, endLabel } from './names.js';
-import { el } from './ui.js';
+import { blurOnEnter, el } from './ui.js';
 
 export class Turning {
   // manifest: the open dataset's manifest; selectedView(): the view the side panel's controls apply to;
@@ -58,7 +58,10 @@ export class Turning {
     this.rotationInputs = this.manifest.axes.labels.map((label, axis) => {
       const range = { min: -MAX_DEGREES, max: MAX_DEGREES, step: 1, value: 0 };
       const slider = el('input', { type: 'range', ...range, title: `Rotate about the ${label} axis` });
-      const number = el('input', { type: 'number', ...range, title: 'Degrees' });
+      // The angle box: a Done key on phones' keyboards (no decimal inputmode, which on iOS has no minus key for
+      // negative angles); Enter also leaves the box, closing the keyboard
+      const number = el('input', { type: 'number', ...range, enterKeyHint: 'done', title: 'Degrees' });
+      blurOnEnter(number);
       // Turn about the data's own axis by the change from its current angle: turnAbout adds that change to this
       // axis's angle only, so the angle becomes the one asked for and the other two stay
       const set = (degrees) => {

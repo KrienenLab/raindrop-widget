@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raindrop brain viewers</title>
+  <style>
+    /* The toggle on top, the viewer filling the rest of the frame */
+    html, body { margin: 0; height: 100%; background: #fff; font-family: system-ui, sans-serif; }
+    body { display: flex; flex-direction: column; }
+    nav { display: flex; gap: 0; padding: 4px; }
+    nav button { padding: 3px 12px; font: inherit; font-size: 13px; border: 1px solid #999; background: #f4f4f4; color: #222; cursor: pointer; }
+    nav button + button { border-left: 0; }
+    nav button:first-child { border-radius: 4px 0 0 4px; }
+    nav button:last-child { border-radius: 0 4px 4px 0; }
+    nav button[aria-pressed="true"] { background: #1e2a3a; border-color: #1e2a3a; color: #fff; }
+    /* min-height 0: the frame may shrink below its 150 px intrinsic height in very short landscape screens, instead
+       of pushing the page into scrolling */
+    iframe { flex: 1; min-height: 0; width: 100%; border: 0; display: block; }
+    /* iPhones in landscape keep the page's text sizes; a quick second tap on a button is a tap, not a zoom */
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    nav button { touch-action: manipulation; }
+    /* Phones and tablets: buttons at least 36 px tall for a finger (as the viewer's own), with text a little larger
+       than the 13 px desktop text; the two still take only about 200 px of the width */
+    @media (pointer: coarse) {
+      nav button { min-height: 36px; padding: 6px 16px; font-size: 15px; }
+    }
+  </style>
+</head>
+<body>
+  <nav aria-label="Dataset">
+    <button type="button" data-dataset="mouse">Mouse</button>
+    <button type="button" data-dataset="marmoset">Marmoset</button>
+  </nav>
+  <iframe id="viewer" title="Brain cell atlas, 3D viewer" allowfullscreen></iframe>
+  <script>
+    // Embed URL of each dataset; the hash (#mouse, #marmoset) picks one, mouse by default
+    const DATASETS = {
+      mouse: 'raindrop/?data=../data/WMB_Yao2023_MERFISH_250k/&embed=1',
+      marmoset: 'raindrop/?data=../data/HMBA_marmoset_Xenium_tank_bg/&embed=1',
+    };
+    const viewer = document.getElementById('viewer');
+    const buttons = document.querySelectorAll('nav button');
+
+    function datasetFromHash() {
+      const name = location.hash.slice(1);
+      return name in DATASETS ? name : 'mouse';
+    }
+
+    let shown = null;
+    // The viewer's ?controls= mode ('compact', its default, or 'full') the frame was last loaded with
+    let controlsMode = 'compact';
+
+    // The controls mode the viewer frame shows now: the viewer's embed bar sets the class compact on its body for
+    // compact controls (its button then reads More controls) and removes it for full ones (button reads Fewer
+    // controls). While a switch is still fetching the next page, contentDocument is the old page, whose mode is read;
+    // before the first load (about:blank), before the new page has built its embed bar, or when contentDocument is
+    // null (widget.html in a sandboxed frame without allow-same-origin, or opened from file:// in Chrome), the frame
+    // keeps the mode it was loaded with
+    function currentControlsMode() {
+      const doc = viewer.contentDocument;
+      if (!doc || !doc.querySelector('#embed-bar .controls-toggle')) return controlsMode;
+      return doc.body.classList.contains('compact') ? 'compact' : 'full';
+    }
+
+    // Load a dataset into the viewer frame (only when it changes), with the controls the frame shows now, and mark its
+    // button. After the first load, location.replace swaps the frame's page without a history entry; setting src
+    // again would add one, so the host page's Back button would step the frame back to the other dataset
+    function show(name) {
+      if (name !== shown) {
+        const src = new URL(DATASETS[name], location.href).href;
+        if (shown === null) {
+          viewer.src = src;
+        } else {
+          controlsMode = currentControlsMode();
+          // Every embed URL has a query already, so the parameter is appended as text
+          viewer.contentWindow.location.replace(controlsMode === 'full' ? src + '&controls=full' : src);
+        }
+        shown = name;
+      }
+      buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.dataset === name)));
+    }
+
+    // replaceState keeps the choice in the URL without adding a history entry either
+    buttons.forEach((b) => b.addEventListener('click', () => {
+      history.replaceState(null, '', '#' + b.dataset.dataset);
+      show(b.dataset.dataset);
+    }));
+    window.addEventListener('hashchange', () => show(datasetFromHash()));
+    show(datasetFromHash());
+  </script>
+</body>
+</html>
