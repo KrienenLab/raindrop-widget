@@ -14,7 +14,17 @@
     nav button:first-child { border-radius: 4px 0 0 4px; }
     nav button:last-child { border-radius: 0 4px 4px 0; }
     nav button[aria-pressed="true"] { background: #1e2a3a; border-color: #1e2a3a; color: #fff; }
-    iframe { flex: 1; width: 100%; border: 0; display: block; }
+    /* min-height 0: the frame may shrink below its 150 px intrinsic height in very short landscape screens, instead
+       of pushing the page into scrolling */
+    iframe { flex: 1; min-height: 0; width: 100%; border: 0; display: block; }
+    /* iPhones in landscape keep the page's text sizes; a quick second tap on a button is a tap, not a zoom */
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    nav button { touch-action: manipulation; }
+    /* Phones and tablets: buttons at least 36 px tall for a finger (as the viewer's own), with text a little larger
+       than the 13 px desktop text; the two still take only about 200 px of the width */
+    @media (pointer: coarse) {
+      nav button { min-height: 36px; padding: 6px 16px; font-size: 15px; }
+    }
   </style>
 </head>
 <body>
