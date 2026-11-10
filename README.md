@@ -28,10 +28,16 @@ The Mouse | Marmoset buttons switch datasets and record the choice in the addres
 `raindrop/?data=../data/WMB_Yao2023_MERFISH_250k/&embed=1` or
 `raindrop/?data=../data/HMBA_marmoset_Xenium_tank_bg/&embed=1`.
 
-`&controls=full` opens with every control shown (default `compact`; the widget's More / Fewer controls button
-switches, and the Mouse | Marmoset buttons keep that choice while the page is open). Type a gene in the box beside
-the color menu to color by it. Plain scrolling over the widget scrolls the page; Ctrl + scroll (Cmd on a Mac) or a
-pinch zooms.
+`widget.html` opens with every control shown (the side panel) when it is at least 700 px wide. In a narrower frame,
+as on a phone, where the panel would cover most of the view, it opens with compact controls. `widget.html?controls=full`
+or `widget.html?controls=compact` sets the opening controls in the embed code instead, also with a hash
+(`widget.html?controls=full#marmoset`). The widget's More / Fewer controls button switches, and the Mouse | Marmoset
+buttons keep that choice while the page is open.
+
+On the one-dataset URLs, `&controls=full` opens with every control shown (default `compact`).
+
+Type a gene in the box beside the color menu to color by it. Plain scrolling over the widget scrolls the page; Ctrl +
+scroll (Cmd on a Mac) or a pinch zooms.
 
 ## Building the marmoset data
 
