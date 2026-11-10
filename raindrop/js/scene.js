@@ -8,8 +8,9 @@
 //
 // Frames: data (the embedding's axes, data units); world = the data turned about its center by the data's
 // rotation (`model`); camera (three.js: x right, y up, looking down -z); screen = the tile in CSS px, x right
-// and y down. Angles are radians unless a name says degrees. The canvas is device px = CSS px *
-// devicePixelRatio; three.js's setSize/setViewport take CSS px, gl_PointSize is in device px.
+// and y down. Angles are radians unless a name says degrees. The canvas is device px = CSS px * the renderer's
+// pixel ratio (the screen's devicePixelRatio, at most MAX_PIXEL_RATIO); three.js's setSize/setViewport take CSS px,
+// gl_PointSize is in device px.
 //
 // Rotation turns the data itself about its center, never the camera, so one orientation drives both the
 // picture and the sliders. Left-dragging works like a turntable that can also tip over: left/right spins the
@@ -28,6 +29,9 @@ import { EXTENT_PER_UNIT_POINT_SIZE, framedDiameterPx } from './positions.js';
 import { dragDirection, knobTurn, recentMovement, wrapTurns } from './rotation.js';
 import { buildScreenGrid, makeProjection, nearestCell, projectShownCells } from './picking.js';
 
+// The canvas draws at most this many device px per CSS px: phones of pixel ratio 3 would fill 9 device px per CSS
+// px, 2.25 times the 4 at ratio 2, for little visible gain on a phone's screen
+const MAX_PIXEL_RATIO = 2;
 // White page behind the points
 const BACKGROUND_COLOR = 0xffffff;
 // Light grey edges of the axes box
@@ -118,7 +122,7 @@ export class SharedCanvas {
   constructor(host) {
     this.host = host;
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
     this.renderer.setClearColor(BACKGROUND_COLOR);
     // Each view clears and draws only its own rectangle
     this.renderer.setScissorTest(true);
@@ -208,6 +212,10 @@ export class PointCloudView {
     this.turnAxis = null;
     // Data direction that sideways drags spin about (see setUpAxis)
     this.upAxis = new THREE.Vector3(0, 1, 0);
+    // Pointers pressed on the tile (pointerId -> tile CSS px), kept by listenForPointers before the drag and 2D
+    // handlers below see an event, so they know whether a press is a lone finger or part of a pinch
+    this.pointersDown = new Map();
+    this.listenForPointers();
     this.listenForDrags();
     this.listenFor2DNavigation();
     // Hover: the projected shown cells and their screen grid (buffers kept for the next build), whether they are
@@ -409,14 +417,38 @@ export class PointCloudView {
     return this.angles.map((r) => THREE.MathUtils.radToDeg(r));
   }
 
+  // Keep this.pointersDown: a press adds its pointer, a move updates it, a release or cancel removes it. A primary
+  // press (a mouse, or the first finger of a new touch gesture) starts afresh, so a release the tile never saw
+  // cannot leave a stale pointer behind
+  listenForPointers() {
+    const tile = this.container;
+    const at = (event) => {
+      const rect = tile.getBoundingClientRect();
+      return [event.clientX - rect.left, event.clientY - rect.top];
+    };
+    tile.addEventListener('pointerdown', (event) => {
+      if (event.isPrimary) this.pointersDown.clear();
+      this.pointersDown.set(event.pointerId, at(event));
+    });
+    tile.addEventListener('pointermove', (event) => {
+      if (this.pointersDown.has(event.pointerId)) this.pointersDown.set(event.pointerId, at(event));
+    });
+    const lift = (event) => this.pointersDown.delete(event.pointerId);
+    tile.addEventListener('pointerup', lift);
+    tile.addEventListener('pointercancel', lift);
+  }
+
   // Left-drag turns the data (3D only); onRotate then reports the new angles, e.g. to the sliders.
   // With Shift held, a drag moves in one direction at a time, the main direction of its recent movement
   // (rotation.recentMovement and rotation.dragDirection): a slightly diagonal drag only spins or only tilts, and
-  // turning the drag the other way switches direction after a few pixels
+  // turning the drag the other way switches direction after a few pixels.
+  // On touch screens only a lone finger turns: a second finger ends the turn (two fingers zoom and pan, see
+  // TrackballControls), and lifting one finger of two does not start a turn again, so a pinch never jumps into one
   listenForDrags() {
     const tile = this.container;
-    // Drag state: the last pointer position (null when no drag), the faded recent movement and the Shift
-    // direction ('x', 'y' or null)
+    // Drag state: the dragging pointer's id and last position (null when no drag), the faded recent movement and the
+    // Shift direction ('x', 'y' or null)
+    let dragId = null;
     let last = null;
     let recent = [0, 0];
     let shiftDirection = null;
@@ -426,10 +458,16 @@ export class PointCloudView {
       return [event.clientX - rect.left, event.clientY - rect.top];
     };
     tile.addEventListener('pointerdown', (event) => {
-      if (event.button === 0 && !this.is2D) last = at(event);
+      const alone = this.pointersDown.size === 1;
+      if (alone && event.button === 0 && !this.is2D) {
+        dragId = event.pointerId;
+        last = at(event);
+      } else {
+        stop();
+      }
     });
     tile.addEventListener('pointermove', (event) => {
-      if (!last) return;
+      if (!last || event.pointerId !== dragId) return;
       const current = at(event);
       const move = [current[0] - last[0], current[1] - last[1]];
       let previous = last;
@@ -454,6 +492,7 @@ export class PointCloudView {
       last = current;
     });
     const stop = () => {
+      dragId = null;
       last = null;
       recent = [0, 0];
       shiftDirection = null;
@@ -540,10 +579,10 @@ export class PointCloudView {
 
   // The shown cell to label at `pointer` (tile CSS px), or -1: the one nearest the camera within the pick radius
   // (picking.nearestCell). The radius is HOVER_RADIUS_PX, or the radius of a shown point at the target's distance if
-  // larger: its diameter in device px as in VERTEX_SHADER, / devicePixelRatio for CSS px, / 2. Cells nearer than the
-  // target are drawn larger than that, so their edges may not count. Filtered-out cells are skipped even when,
-  // opaque, they are drawn over shown ones. None while shown cells are not drawn (opacity 0) or before positions
-  // are set
+  // larger: its diameter in device px as in VERTEX_SHADER, / the renderer's pixel ratio for CSS px, / 2. Cells
+  // nearer than the target are drawn larger than that, so their edges may not count. Filtered-out cells are skipped
+  // even when, opaque, they are drawn over shown ones. None while shown cells are not drawn (opacity 0) or before
+  // positions are set
   cellAt(pointer) {
     if (!this.shown.visible || !this.geometry.getAttribute('state')) return -1;
     const distance = this.camera.position.distanceTo(this.controls.target);
@@ -588,13 +627,24 @@ export class PointCloudView {
   }
 
   // 2D views: the mouse wheel zooms about the pointer and a left drag pans (3D views turn on left drags and zoom
-  // and pan with TrackballControls)
+  // and pan with TrackballControls). On touch screens a lone finger pans as a left drag does (as for 3D turns, not
+  // again after a pinch until all fingers lifted); two fingers pinch-zoom about their midpoint here, and pan with
+  // TrackballControls (its zoom is off in 2D, see setPositions)
   listenFor2DNavigation() {
     const tile = this.container;
+    // The panning pointer's id and last position (null: no pan), and the two pinching pointers' distance in CSS px
+    // (null: no pinch)
+    let panId = null;
     let last = null;
+    let pinchGap = null;
     const at = (event) => {
       const rect = tile.getBoundingClientRect();
       return [event.clientX - rect.left, event.clientY - rect.top];
+    };
+    // The two pressed pointers' distance and midpoint (tile CSS px)
+    const pinchShape = () => {
+      const [a, b] = [...this.pointersDown.values()];
+      return { gap: Math.hypot(a[0] - b[0], a[1] - b[1]), middle: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] };
     };
     // Not passive, so preventDefault can stop the page from scrolling
     tile.addEventListener('wheel', (event) => {
@@ -604,15 +654,31 @@ export class PointCloudView {
       this.zoomAt(at(event), Math.exp(event.deltaY * WHEEL_ZOOM_PER_PIXEL));
     }, { passive: false });
     tile.addEventListener('pointerdown', (event) => {
-      if (event.button === 0 && this.is2D) last = at(event);
+      const fingers = this.pointersDown.size;
+      panId = fingers === 1 && event.button === 0 && this.is2D ? event.pointerId : null;
+      last = panId === null ? null : at(event);
+      pinchGap = fingers === 2 && event.pointerType === 'touch' && this.is2D ? pinchShape().gap : null;
     });
     tile.addEventListener('pointermove', (event) => {
-      if (!last) return;
+      if (pinchGap !== null && this.pointersDown.has(event.pointerId)) {
+        // Spreading the fingers zooms in: the camera's distance scales by the old gap over the new one, about the
+        // point between the fingers (zoomAt keeps it under them and limits the zoom); fingers at one spot (a gap of
+        // 0) give no ratio, so they wait for the next move
+        const { gap, middle } = pinchShape();
+        if (gap > 0 && pinchGap > 0) this.zoomAt(middle, pinchGap / gap);
+        pinchGap = gap;
+        return;
+      }
+      if (!last || event.pointerId !== panId) return;
       const current = at(event);
       this.panBy(current[0] - last[0], current[1] - last[1]);
       last = current;
     });
-    const stop = () => { last = null; };
+    const stop = () => {
+      panId = null;
+      last = null;
+      pinchGap = null;
+    };
     tile.addEventListener('pointerup', stop);
     tile.addEventListener('pointercancel', stop);
   }
