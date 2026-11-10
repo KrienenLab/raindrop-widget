@@ -3,13 +3,18 @@
 import { orderCategories } from './filters.js';
 
 // Rows to draw: one per group, with the summed count of its children, followed by its children's rows when
-// the group is open. A group is open when it is in `expanded`, or when a search is typed and the group or
-// one of its children matches it; a matching group shows all of its children, otherwise only matching
-// children are shown. Groups and children are sorted by name or by count (filters.orderCategories)
+// the group is open. Children are category codes; parentOf[code] is the index of the code's group in `groups`.
+// A group is open when it is in `expanded` (a Set of group indices), or when a search is typed and the group
+// or one of its children matches it (case-insensitive substring; `search` must already be lower case). A
+// matching group shows all of its children, otherwise only matching children are shown, and a group with no
+// match is left out. Groups and children are sorted by name or by count (filters.orderCategories). Each row's
+// `codes` lists the categories it stands for: all of a group's children, or the child itself
 export function treeRows(names, counts, parentOf, groups, sortBy, search, expanded) {
+  // Children of each group, and each group's count as the sum of its children's
   const children = groups.map(() => []);
   parentOf.forEach((group, code) => children[group].push(code));
   const groupCounts = children.map((codes) => codes.reduce((sum, code) => sum + counts[code], 0));
+  // Rank of every child in the overall sort order, to sort the children within each group the same way
   const childOrder = orderCategories(names, counts, sortBy);
   const rank = new Map(childOrder.map((code, i) => [code, i]));
 
@@ -32,7 +37,8 @@ export function treeRows(names, counts, parentOf, groups, sortBy, search, expand
   return rows;
 }
 
-// Whether all, some or none of a group's children are ticked in a filter (allowed = null: nothing ticked)
+// Whether 'all', 'some' or 'none' of a group's children are ticked in a filter (allowed = null: nothing
+// ticked); a group without children is 'none'
 export function groupState(codes, allowed) {
   const ticked = allowed ? codes.filter((code) => allowed[code]).length : 0;
   if (ticked === 0) return 'none';
