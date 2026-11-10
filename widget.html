@@ -48,15 +48,34 @@
     }
 
     let shown = null;
+    // The viewer's ?controls= mode ('compact', its default, or 'full') the frame was last loaded with
+    let controlsMode = 'compact';
 
-    // Load a dataset into the viewer frame (only when it changes) and mark its button. After the first load,
-    // location.replace swaps the frame's page without a history entry; setting src again would add one, so the host
-    // page's Back button would step the frame back to the other dataset
+    // The controls mode the viewer frame shows now: the viewer's embed bar sets the class compact on its body for
+    // compact controls (its button then reads More controls) and removes it for full ones (button reads Fewer
+    // controls). While a switch is still fetching the next page, contentDocument is the old page, whose mode is read;
+    // before the first load (about:blank), before the new page has built its embed bar, or when contentDocument is
+    // null (widget.html in a sandboxed frame without allow-same-origin, or opened from file:// in Chrome), the frame
+    // keeps the mode it was loaded with
+    function currentControlsMode() {
+      const doc = viewer.contentDocument;
+      if (!doc || !doc.querySelector('#embed-bar .controls-toggle')) return controlsMode;
+      return doc.body.classList.contains('compact') ? 'compact' : 'full';
+    }
+
+    // Load a dataset into the viewer frame (only when it changes), with the controls the frame shows now, and mark its
+    // button. After the first load, location.replace swaps the frame's page without a history entry; setting src
+    // again would add one, so the host page's Back button would step the frame back to the other dataset
     function show(name) {
       if (name !== shown) {
         const src = new URL(DATASETS[name], location.href).href;
-        if (shown === null) viewer.src = src;
-        else viewer.contentWindow.location.replace(src);
+        if (shown === null) {
+          viewer.src = src;
+        } else {
+          controlsMode = currentControlsMode();
+          // Every embed URL has a query already, so the parameter is appended as text
+          viewer.contentWindow.location.replace(controlsMode === 'full' ? src + '&controls=full' : src);
+        }
         shown = name;
       }
       buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.dataset === name)));

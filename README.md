@@ -29,7 +29,9 @@ The Mouse | Marmoset buttons switch datasets and record the choice in the addres
 `raindrop/?data=../data/HMBA_marmoset_Xenium_tank_bg/&embed=1`.
 
 `&controls=full` opens with every control shown (default `compact`; the widget's More / Fewer controls button
-switches). Type a gene in the box beside the color menu to color by it. Plain scrolling over the widget scrolls the page; Ctrl + scroll (Cmd on a Mac) or a pinch zooms.
+switches, and the Mouse | Marmoset buttons keep that choice while the page is open). Type a gene in the box beside
+the color menu to color by it. Plain scrolling over the widget scrolls the page; Ctrl + scroll (Cmd on a Mac) or a
+pinch zooms.
 
 ## Building the marmoset data
 
