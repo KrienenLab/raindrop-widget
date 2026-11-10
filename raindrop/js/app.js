@@ -14,7 +14,7 @@ import { Legend } from './legend.js';
 import { cellValueText } from './names.js';
 import { FilterPanels } from './panels.js';
 import { Turning } from './turning.js';
-import { el, formatCount, svg } from './ui.js';
+import { blurOnEnter, el, formatCount, svg } from './ui.js';
 import { ViewGrid } from './views.js';
 
 // Per-cell states for PointCloudView.setState (see scene.js): not drawn (no position in this embedding), drawn
@@ -245,14 +245,16 @@ class App {
     control('show-axes', 'showAxes', (input) => input.checked);
 
     // The number box beside each size and opacity slider: a typed value applies on Enter or when the box loses focus
-    // ('change', as for the rotation angle boxes), rounded to the box's step (0.1 px, 1%) so that the box then shows
-    // the setting. toSlider maps it to the slider's units and the result is clamped to the slider's range
-    // (out-of-range values take the nearest end); the slider moves to its nearest step, while the setting takes the
-    // exact value, read as the slider's value is. Text that is not a number (valueAsNumber NaN), or a size typed
-    // before the view is framed, changes nothing, and the box shows the current value again
+    // ('change', as for the rotation angle boxes; Enter also leaves the box, closing a phone's keyboard), rounded to
+    // the box's step (0.1 px, 1%) so that the box then shows the setting. toSlider maps it to the slider's units and
+    // the result is clamped to the slider's range (out-of-range values take the nearest end); the slider moves to its
+    // nearest step, while the setting takes the exact value, read as the slider's value is. Text that is not a number
+    // (valueAsNumber NaN), or a size typed before the view is framed, changes nothing, and the box shows the current
+    // value again
     const numberBox = (id, key, toSlider, read) => {
       const slider = document.getElementById(id);
       const box = document.getElementById(`${id}-box`);
+      blurOnEnter(box);
       box.addEventListener('change', () => {
         const step = Number(box.step);
         const value = toSlider(Math.round(box.valueAsNumber / step) * step);
