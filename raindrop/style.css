@@ -177,7 +177,9 @@ body.compact #legend { width: clamp(220px, 22vw, 360px); }
              max-width: calc(100% - 16px);
              padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: rgba(255, 255, 255, 0.9); }
 #embed-bar[hidden] { display: none; }
-#embed-bar .bar-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+/* The borrowed menus and the bar's buttons (Reset rotation, the controls toggle, Full screen) wrap as two groups, so
+   a narrow screen keeps the three buttons together below the menus, on one row where they fit */
+#embed-bar .bar-controls, #embed-bar .bar-buttons { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 #embed-bar select { width: auto; }
 #embed-bar .gene-box { margin-top: 0; }
 #embed-bar #gene { width: 140px; }
