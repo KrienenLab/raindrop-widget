@@ -1,3 +1,21 @@
+/*
+raindrop: a browser viewer for single-cell and spatial data
+Copyright (C) 2026 Ning Wang
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 // Cell positions: which cells can be drawn, and where the data sits in space.
 // Plain functions over typed arrays, so they run in the browser and in node tests.
 // Positions are in the data frame: the embedding's own axes and units (e.g. mm for CCF coordinates).

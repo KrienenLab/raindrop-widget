@@ -1,3 +1,21 @@
+/*
+raindrop: a browser viewer for single-cell and spatial data
+Copyright (C) 2026 Ning Wang
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 // Axes of a view: tick values and axis names placed along the axes box's edges, and the axis widget (one arrow
 // per data axis, turning with the data). Both are redrawn after every frame (app.js sets the scene's onRender).
 // They read and fill these fields of a view (app.createView, app.setEmbedding): scene (scene.js), entry (its

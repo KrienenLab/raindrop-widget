@@ -1,3 +1,21 @@
+/*
+raindrop: a browser viewer for single-cell and spatial data
+Copyright (C) 2026 Ning Wang
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 // The legend panel right of the plots: what the selected view is colored by, as checkbox rows of a categorical
 // column's values (ticking them, or its reverse toggle, sets that column's filter) or as a color bar for numbers and
 // genes.
@@ -107,7 +125,7 @@ export class Legend {
 
   // Reverse the selected view's colored column's filter, adding it (nothing ticked, so no effect yet) if needed. The
   // toggle is disabled while the filter is added (its values load asynchronously), so a quick second press cannot
-  // add the column twice
+  // reverse it back before the first has applied
   async reverseFromLegend() {
     this.legendReverse.disabled = true;
     try {
