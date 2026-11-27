@@ -3,7 +3,10 @@
 3D browser views of brain cell atlases for the Krienen Lab website, made with the
 [raindrop](https://github.com/NingWang1729/raindrop) viewer. Everything here is static files served by GitHub Pages.
 
-- `raindrop/`: the viewer (three.js, no build step).
+- `raindrop/`: the viewer (three.js, no build step), the `viewer/` folder of
+  [raindrop v0.1.0](https://github.com/NingWang1729/raindrop/releases/tag/v0.1.0) unchanged, under the GNU Lesser
+  General Public License, version 3 or later (LGPL-3.0-or-later; `raindrop/LICENSE`); its three.js files are under the
+  MIT License (`raindrop/vendor/THREE_LICENSE`).
 - `data/WMB_Yao2023_MERFISH_250k/`: the adult mouse brain MERFISH atlas of Yao et al., Nature (2023), from the
   Allen Brain Cell Atlas release 20231215 (C57BL6J-638850): 250,000 of the 3,739,961 cells with CCF positions,
   with the published cell types and CCF regions, and the published log2 expression (release 20230830) of the 500

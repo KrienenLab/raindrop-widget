@@ -1,8 +1,26 @@
+/*
+raindrop: a browser viewer for single-cell and spatial data
+Copyright (C) 2026 Ning Wang
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 // Filters: one panel per obs column in the side panel, added from the add-filter menu; a categorical column's panel
 // lists its values with checkboxes, a numeric column's has min and max boxes. All panels combine with AND
-// (filters.js) and belong to the selected view's settings.
+// (filters.js) and belong to the settings of the view they were added for; the side panel shows the selected view's.
 import * as filters from './filters.js';
-import { el, enableDragSelect, reverseToggle, showReversed, sortSelect } from './ui.js';
+import { el, enableDragSelect, reportErrors, reverseToggle, showReversed, sortSelect } from './ui.js';
 
 export class FilterPanels {
   // manifest, dataset: the open dataset (data.js); categories: column titles and rows (categories.js);
@@ -22,23 +40,55 @@ export class FilterPanels {
     return this.selectedFilters();
   }
 
-  // The add-filter menu adds a panel for the column picked (its options: updateAddFilterOptions)
+  // The add-filter menu adds a filter on the column picked to the selected view (its options:
+  // updateAddFilterOptions; pickFilter). Picking the prompt does nothing
   listenForAddFilter() {
-    document.getElementById('add-filter').addEventListener('change', async (event) => {
-      if (event.target.value) await this.addFilter(event.target.value);
-    });
+    const add = document.getElementById('add-filter');
+    add.addEventListener('change', () => reportErrors(async () => {
+      if (add.value) await this.pickFilter(this.selectedView(), add.value);
+    }));
   }
 
-  // A filter on obs column `name`, with its panel: the existing one if the column has one. A filter starts with
-  // nothing ticked, no bounds and not reversed, so it shows every cell
-  async addFilter(name) {
-    if (this.filters.some((f) => f.field.name === name)) return this.filters.find((f) => f.field.name === name);
+  // A column picked in the add-filter menu for a view: its filter is added once its values load. Only the view's
+  // newest pick adds (view.loads.filter counts them): one that finishes after a later pick, or fails after it, is
+  // dropped, as the menu has moved on from it. The count is per view: picks made in two linked views both add to
+  // their shared filters (selecting a view puts the menu back on its prompt). A failed newest pick puts the menu back
+  // on its prompt and rejects (the handler shows the error, see reportErrors)
+  async pickFilter(view, name) {
+    const load = ++view.loads.filter;
+    let values;
+    try {
+      values = await this.dataset.fieldValues(name);
+    } catch (error) {
+      if (load !== view.loads.filter) return;
+      if (view === this.selectedView()) document.getElementById('add-filter').value = '';
+      throw error;
+    }
+    if (load !== view.loads.filter) return;
+    this.addLoadedFilter(view, this.dataset.fields.get(name), values);
+  }
+
+  // The filter on obs column `name` in a view's settings (the selected view's by default), added with its panel once
+  // the column's values load if those settings have none. For the dataset's starting filters and the legend, which use
+  // the filter returned; never dropped
+  async addFilter(name, view = this.selectedView()) {
     const field = this.dataset.fields.get(name);
     if (!field) throw new Error(`${name} is not an obs column of this dataset`);
+    return this.addLoadedFilter(view, field, await this.dataset.fieldValues(name));
+  }
+
+  // The filter on `field` in a view's settings (those it has now, after the download: an unlinked view's own), or a new
+  // one with its panel. Checked once the values are loaded, so two requests for one column add one panel. The panel is
+  // shown now if those are the selected view's settings, otherwise when a view using them is selected (showSettings).
+  // A new filter starts with nothing ticked, no bounds and not reversed, so it shows every cell
+  addLoadedFilter(view, field, values) {
+    const { filters } = view.settings;
+    const existing = filters.find((f) => f.field.name === field.name);
+    if (existing) return existing;
     const filter = {
       field,
       kind: field.kind === 'category' ? 'category' : 'range',
-      values: await this.dataset.fieldValues(name),
+      values,
       allowed: null,
       min: null,
       max: null,
@@ -49,8 +99,8 @@ export class FilterPanels {
       expanded: new Set(),
     };
     filter.panel = this.buildFilterPanel(filter);
-    document.getElementById('filters').append(filter.panel);
-    this.filters.push(filter);
+    if (filters === this.filters) document.getElementById('filters').append(filter.panel);
+    filters.push(filter);
     this.refresh();
     return filter;
   }

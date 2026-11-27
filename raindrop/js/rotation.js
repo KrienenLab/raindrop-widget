@@ -1,3 +1,21 @@
+/*
+raindrop: a browser viewer for single-cell and spatial data
+Copyright (C) 2026 Ning Wang
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 // Rotation angles. The data's orientation is three angles (a, b, c) about its x, y and z axes, applied as
 // R = Rx(a) Ry(b) Rz(c) (three.js Euler order 'XYZ'), the angles the rotation sliders show. R maps the data
 // frame (the embedding's axes) to the world frame (where the camera is): world = R * data, as column vectors.

@@ -1,8 +1,26 @@
+/*
+raindrop: a browser viewer for single-cell and spatial data
+Copyright (C) 2026 Ning Wang
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 // The grid of views: the side panel's Views menu (1 to MAX_VIEWS views), the tiles' layout, and linking. Linked views
 // share one settings object, the group's (App's shared settings: filters, turn axis, point size, opacities, axes), and
 // those on the same embedding share camera and rotation; each tile's link button unlinks its view, giving it its own
 // copy of the settings.
-import { el, svg } from './ui.js';
+import { el, reportErrors, svg } from './ui.js';
 
 // Most views shown at once (a 3 x 4 grid)
 const MAX_VIEWS = 12;
@@ -39,7 +57,7 @@ export class ViewGrid {
   buildViewCount() {
     const count = document.getElementById('view-count');
     for (let n = 1; n <= MAX_VIEWS; n++) count.append(el('option', { value: n, textContent: n }));
-    count.addEventListener('change', () => this.setViewCount(Number(count.value)));
+    count.addEventListener('change', () => reportErrors(() => this.setViewCount(Number(count.value))));
   }
 
   // A copy of settings for a view being unlinked: its filters start as the group's, with their own panels
@@ -110,18 +128,31 @@ export class ViewGrid {
   // Show n views: new ones copy the selected view (embedding, colors, camera and rotation); the last
   // ones are removed when there are fewer
   async setViewCount(n) {
-    document.getElementById('view-count').value = n;
+    const count = document.getElementById('view-count');
+    count.value = n;
     while (this.views.length > n) {
       const view = this.views.pop();
+      // The removed view's pending embedding and color become older than its newest request, so they are dropped
+      // (with no error) when they finish; a pending add-filter pick still lands, as it goes into the view's settings,
+      // which other linked views may share (FilterPanels.pickFilter)
+      view.loads.embedding++;
+      view.loads.color++;
       view.scene.dispose();
       view.tile.remove();
       if (view === this.selectedView()) this.select(this.views[0]);
     }
+    // New views copy the selected view's drawn embedding, which it lacks while its first one loads
     const template = this.selectedView();
+    if (this.views.length < n && !template.entry) {
+      count.value = this.views.length;
+      throw new Error('The view has no embedding yet: add views once it is drawn');
+    }
     while (this.views.length < n) {
       const view = this.createView();
       await this.setEmbedding(view, template.entry.name);
-      await this.setColor(view, template.color);
+      // The template has no color yet while its first color loads (view.color names drawn colors only); the new view
+      // then stays grey until a color is picked for it
+      if (template.color) await this.setColor(view, template.color);
       // The template's camera, its distance scaled by the two views' framing distances (fit), as in syncFrom
       view.scene.setViewState(template.scene.viewState(), view.scene.fit / template.scene.fit);
     }

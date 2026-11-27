@@ -1,8 +1,26 @@
+/*
+raindrop: a browser viewer for single-cell and spatial data
+Copyright (C) 2026 Ning Wang
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 // Color by: the side panel's color menu (any obs column) and gene box (a gene source and a gene typed with
 // suggestions), and the per-cell colors of a view.
 import { colorCategories, colorValues, geneColors, quantile, sortedFinite } from './colors.js';
 import { colorLabel } from './names.js';
-import { el } from './ui.js';
+import { el, reportErrors } from './ui.js';
 
 // Fraction of the values below the color scale's low end and above its high end: numbers span their middle
 // 98%, and the top 1% of expressing cells saturate a gene's scale, so outliers do not wash out the rest
@@ -11,13 +29,15 @@ const OUTLIER_FRACTION = 0.01;
 export class Coloring {
   // manifest, dataset: the open dataset (data.js); categories: the shared palettes (categories.js);
   // selectedView(): the view the side panel's controls apply to; setStatus(message): the status line;
-  // renderLegend(): redraw the legend of the selected view (legend.js)
-  constructor({ manifest, dataset, categories, selectedView, setStatus, renderLegend }) {
+  // clearStatus(message): clear it if it still shows message; renderLegend(): redraw the legend of the selected view
+  // (legend.js)
+  constructor({ manifest, dataset, categories, selectedView, setStatus, clearStatus, renderLegend }) {
     this.manifest = manifest;
     this.dataset = dataset;
     this.categories = categories;
     this.selectedView = selectedView;
     this.setStatus = setStatus;
+    this.clearStatus = clearStatus;
     this.renderLegend = renderLegend;
   }
 
@@ -29,7 +49,7 @@ export class Coloring {
     select.append(el('option', { value: '', textContent: '(gene)', disabled: true, hidden: !hasGenes }));
     document.getElementById('gene-box').hidden = !hasGenes;
     for (const f of this.manifest.fields) select.append(el('option', { value: f.name, textContent: f.name }));
-    select.addEventListener('change', () => this.setColor(this.selectedView(), { kind: 'field', name: select.value }));
+    select.addEventListener('change', () => reportErrors(() => this.setColor(this.selectedView(), { kind: 'field', name: select.value })));
 
     // The source menu is shown only when there is a choice; the gene input suggests the chosen source's genes
     const sources = document.getElementById('gene-source');
@@ -50,7 +70,7 @@ export class Coloring {
     input.addEventListener('change', () => {
       const source = this.manifest.gene_sources.find((s) => s.name === sources.value);
       if (source.genes.includes(input.value)) {
-        this.setColor(this.selectedView(), { kind: 'gene', source: source.name, name: input.value });
+        reportErrors(() => this.setColor(this.selectedView(), { kind: 'gene', source: source.name, name: input.value }));
       } else {
         this.setStatus(`${input.value} is not in the ${source.name} genes`);
       }
@@ -70,23 +90,43 @@ export class Coloring {
   }
 
   // Color a view by `color`: { kind: 'field', name } for an obs column, or { kind: 'gene', source, name }; its
-  // tile's corner names it (shown with several views). view.cellValues keeps the per-cell values the colors were
-  // made from, with their color, for the hover label; both are set together once loaded, so the label never pairs a
-  // new color with the old values
+  // tile's corner names it (shown with several views). view.color and view.cellValues (the per-cell values the colors
+  // were made from, with their color, for the hover label) are set with the colors once loaded, so they always
+  // describe what is drawn. Only the view's newest color request draws (view.loads.color counts them): one that
+  // finishes after a later request, or fails after it, or after its view was removed, is dropped, clearing its own
+  // status message if no other has replaced it. A failed newest request puts the side panel back on the drawn color
+  // and rejects (the handlers show the error, see reportErrors)
   async setColor(view, color) {
-    view.color = color;
-    this.setStatus(`Loading ${color.name}...`);
+    const load = ++view.loads.color;
+    const message = `Loading ${color.name}...`;
+    this.setStatus(message);
     const isGene = color.kind === 'gene';
-    const values = await (isGene ? this.dataset.geneValues(color.source, color.name) : this.dataset.fieldValues(color.name));
+    let values;
+    try {
+      values = await (isGene ? this.dataset.geneValues(color.source, color.name) : this.dataset.fieldValues(color.name));
+    } catch (error) {
+      if (load !== view.loads.color) {
+        this.clearStatus(message);
+        return;
+      }
+      if (view === this.selectedView()) this.showColorControls(view);
+      throw error;
+    }
+    if (load !== view.loads.color) {
+      this.clearStatus(message);
+      return;
+    }
+
     const rgb = isGene ? this.geneColors(view, color, values) : this.fieldColors(view, color, values);
     view.scene.setColors(rgb);
+    view.color = color;
     view.cellValues = { color, values };
     view.tileLegend.textContent = colorLabel(color, this.manifest.gene_sources);
     if (view === this.selectedView()) {
       this.showColorControls(view);
       this.renderLegend();
     }
-    this.setStatus('');
+    this.clearStatus(message);
   }
 
   // Genes: the scale runs from 0 to the 99th percentile of the expressing (positive) cells, so zero is darkest

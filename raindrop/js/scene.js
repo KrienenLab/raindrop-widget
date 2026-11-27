@@ -1,3 +1,21 @@
+/*
+raindrop: a browser viewer for single-cell and spatial data
+Copyright (C) 2026 Ning Wang
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
 // WebGL point cloud: one point per cell, drawn by three.js.
 //
 // Each cell has a state: 0 = not drawn (no position), 1 = context (filtered out, drawn grey or in its color at its
@@ -179,6 +197,8 @@ export class PointCloudView {
     // (renderOrder 1): blending over it while translucent, depth-tested against it like any opaque object at 100%
     // (three.js draws opaque objects before transparent ones)
     this.geometry = new THREE.BufferGeometry();
+    // Colors given before the first positions, waiting for setPositions (setColors)
+    this.pendingColors = null;
     this.uniforms = { uScale: { value: 1 } };
     this.shown = this.makePoints(SHOWN_STATE, 1, false);
     this.context = this.makePoints(CONTEXT_STATE, CONTEXT_OPACITY, true);
@@ -269,8 +289,13 @@ export class PointCloudView {
     const n = xyz.length / 3;
     this.geometry.setAttribute('position', new THREE.BufferAttribute(xyz, 3));
     if (!this.geometry.getAttribute('color') || this.geometry.getAttribute('color').count !== n) {
-      // Colors: one byte per channel, normalized to 0..1 in the shader
-      this.geometry.setAttribute('color', new THREE.BufferAttribute(new Uint8Array(n * 3).fill(UNSET_COLOR), 3, true));
+      // Colors: one byte per channel, normalized to 0..1 in the shader; those given before the first positions
+      // (setColors) if any, else grey
+      const rgb = new Uint8Array(n * 3).fill(UNSET_COLOR);
+      // (the same length: every embedding has a position, or NaN, for each of the dataset's cells)
+      if (this.pendingColors?.length === rgb.length) rgb.set(this.pendingColors);
+      this.pendingColors = null;
+      this.geometry.setAttribute('color', new THREE.BufferAttribute(rgb, 3, true));
       this.geometry.setAttribute('state', new THREE.BufferAttribute(new Float32Array(n), 1));
     }
     this.center = center;
@@ -336,9 +361,14 @@ export class PointCloudView {
     return [(ndc.x + 1) / 2 * this.container.clientWidth, (1 - ndc.y) / 2 * this.container.clientHeight];
   }
 
-  // rgb: one byte per channel per cell, n * 3 values
+  // rgb: one byte per channel per cell, n * 3 values. Colors given before the first positions (a color that loads
+  // faster than the view's embedding) are kept until setPositions makes the color attribute
   setColors(rgb) {
     const attribute = this.geometry.getAttribute('color');
+    if (!attribute) {
+      this.pendingColors = rgb;
+      return;
+    }
     attribute.array.set(rgb);
     attribute.needsUpdate = true;
     this.render();
@@ -597,7 +627,7 @@ export class PointCloudView {
   // buffers (new ones when the cell count changed). The matrix maps data to clip: the points' placement in the world
   // (data center shifted and turned with `model`), then world to camera (matrixWorldInverse), then the projection.
   // render() only asks for a frame, and three.js updates these matrices when it draws, so they are updated here
-  // first. Cost: about 30-70 ms at 750k shown cells (node, job 7402990), paid on the first lookup after each change,
+  // first. Cost: about 30-70 ms for a large dataset (timed in node), paid on the first lookup after each change,
   // so a mouse moving during a scroll zoom rebuilds once per frame (a possible optimization: wait for the picture to
   // settle)
   buildPickGrid(bucketPx) {
@@ -816,7 +846,7 @@ export class PointCloudView {
   // follow the same rule, so filtered-out cells at 100% hide what is behind them. Depth writes:
   // - shown points a pixel or more wide keep them when translucent, so the nearest cell is the last layer blended in
   //   each pixel: a fragment passes the depth test only if nearer than all that passed before it (cells behind show
-  //   through only where drawn earlier; RAIN-22 option A);
+  //   through only where drawn earlier);
   // - sub-pixel shown points do not, as their faint dots must add up to show the density;
   // - context points (the faint group, one alpha) write depth only when opaque.
   // Checked before each drawn frame, as zooming changes their size on screen; the material is recompiled only when
